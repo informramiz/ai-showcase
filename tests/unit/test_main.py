@@ -1,5 +1,5 @@
 import pytest
-from pydantic import SecretStr
+from pydantic import AnyHttpUrl, SecretStr
 
 from sourcebook.adapters.llm.claude import AnthropicProvider
 from sourcebook.adapters.llm.fake import FakeProvider
@@ -25,6 +25,19 @@ def test_build_provider_uses_claude_when_a_key_is_set() -> None:
     provider = build_provider(_settings(ProviderChoice.AUTO, "sk-placeholder"))
     assert isinstance(provider, AnthropicProvider)
     assert provider.name.startswith("claude")
+
+
+def test_gateway_base_url_disables_server_side_fallback() -> None:
+    settings = Settings(
+        _env_file=None,
+        provider=ProviderChoice.ANTHROPIC,
+        anthropic_api_key=SecretStr("sk-placeholder"),
+        anthropic_base_url=AnyHttpUrl("https://openrouter.ai/api"),
+    )
+    provider = build_provider(settings)
+    assert isinstance(provider, AnthropicProvider)
+    assert provider._server_fallback is False
+    assert build_provider(_settings(ProviderChoice.ANTHROPIC, "k"))._server_fallback is True  # type: ignore[attr-defined]
 
 
 def test_forcing_claude_without_a_key_fails_fast() -> None:

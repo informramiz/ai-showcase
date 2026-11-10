@@ -81,12 +81,19 @@ class FakeMessages:
 
 
 def make_provider(
-    events: list[Any] | None = None, final: Any = None, error: Exception | None = None
+    events: list[Any] | None = None,
+    final: Any = None,
+    error: Exception | None = None,
+    *,
+    server_fallback: bool = True,
 ) -> tuple[AnthropicProvider, FakeMessages]:
     messages = FakeMessages(FakeStream(events or [], final, error))
     client = NS(beta=NS(messages=messages))
     provider = AnthropicProvider(
-        cast("anthropic.AsyncAnthropic", client), model="claude-opus-5-5", effort="low"
+        cast("anthropic.AsyncAnthropic", client),
+        model="claude-opus-5-5",
+        effort="low",
+        server_fallback=server_fallback,
     )
     return provider, messages
 
@@ -156,6 +163,14 @@ async def test_maps_stream_events_and_final_message() -> None:
     assert sent["betas"] == [FALLBACK_BETA]
     assert sent["tools"][0]["eager_input_streaming"] is True
     assert sent["messages"] == [{"role": "user", "content": "What is the meal allowance?"}]
+
+
+async def test_gateway_mode_omits_the_anthropic_only_fallback_options() -> None:
+    provider, messages = make_provider([], final_message(), server_fallback=False)
+    await collect(provider)
+    assert "fallbacks" not in messages.kwargs
+    assert "betas" not in messages.kwargs
+    assert messages.kwargs["thinking"] == {"type": "adaptive", "display": "summarized"}
 
 
 async def test_refusal_and_unknown_stop_reasons() -> None:
@@ -274,3 +289,8 @@ def test_build_client_uses_the_given_key() -> None:
     client = build_client("test-key-not-real")
     assert client.api_key == "test-key-not-real"
     assert client.max_retries == 2
+
+
+def test_build_client_accepts_a_gateway_base_url() -> None:
+    client = build_client("test-key-not-real", "https://openrouter.ai/api")
+    assert str(client.base_url).startswith("https://openrouter.ai/api")

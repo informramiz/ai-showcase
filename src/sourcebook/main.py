@@ -36,9 +36,11 @@ def build_provider(settings: Settings) -> LLMProvider:
         return FakeProvider(token_delay=0.012)
     if settings.anthropic_api_key is None:
         raise RuntimeError("SOURCEBOOK_PROVIDER=anthropic needs ANTHROPIC_API_KEY to be set.")
-    client = build_client(settings.anthropic_api_key.get_secret_value())
+    base_url = str(settings.anthropic_base_url) if settings.anthropic_base_url else None
+    client = build_client(settings.anthropic_api_key.get_secret_value(), base_url)
     return AnthropicProvider(
         client,
+        server_fallback=base_url is None,
         model=settings.model,
         effort=settings.effort,
         max_tokens=settings.max_output_tokens,
