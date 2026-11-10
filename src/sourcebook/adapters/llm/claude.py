@@ -105,7 +105,7 @@ class AnthropicProvider:
             logger.warning("Model produced malformed tool input: %s", exc)
             raise ProviderError("The model produced malformed tool input. Please retry.") from exc
         except anthropic.AuthenticationError as exc:
-            raise ProviderError("The Anthropic API key was rejected.") from exc
+            raise ProviderError("The API key was rejected by the model provider.") from exc
         except anthropic.PermissionDeniedError as exc:
             raise ProviderError("This API key cannot use the configured model.") from exc
         except anthropic.NotFoundError as exc:
