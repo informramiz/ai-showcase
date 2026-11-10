@@ -132,7 +132,11 @@ Run on 2026-11-10 against `anthropic/claude-sonnet-5.5` through [OpenRouter's An
 | --- | --- |
 | <img src="docs/screenshots/sb-live-answer.png" width="400"> | <img src="docs/screenshots/sb-live-viewer.png" width="400"> |
 
-Limits found while testing: OpenRouter rejects the Anthropic-only server-side `fallbacks` option, so Sourcebook leaves it off whenever a base URL is set. Thinking summaries did not appear in the trace for simple questions on this model. Replay was checked through the API, not by clicking in the UI. Direct api.anthropic.com was not tested (no key available), nor the Docker image.
+Also verified: replaying a past answer by clicking it in "Recent questions" in a real browser (same text, citations and steps; screenshot below), and the Docker image built and answering a live question inside the container (`/api/health` ok, tool call, 3 citations, `done`).
+
+<img src="docs/screenshots/sb-live-replay.png" width="600">
+
+Limits found while testing: OpenRouter rejects the Anthropic-only server-side `fallbacks` option, so Sourcebook leaves it off whenever a base URL is set. A replayed answer shows each tool step but not the per-passage scores the live trace shows. Direct api.anthropic.com was not tested (no Anthropic key), so the default `SOURCEBOOK_MODEL` id is untested against it.
 
 ## Run
 
@@ -227,6 +231,8 @@ There is no authentication: this is a single-user demo. A multi-user deployment 
 - **Async end to end** (aiosqlite, the async Anthropic client, async generators for streams), so one process can serve many slow model calls at once.
 
 ### Known limits
+
+- **Thinking summaries are optional.** Sonnet 5.5 sent none for the questions tested through OpenRouter, so the trace shows only tool steps (or a short note when the model answered directly). The UI never renders an empty thinking step. Effort is not raised just to force one.
 
 - Beyond the stubbed unit tests, the Claude provider was run live once, through OpenRouter (see above). The demo-model screenshots and API tests do not call a model.
 - No rate limiting: each question costs model tokens, so put a limit in front of a public deployment.
