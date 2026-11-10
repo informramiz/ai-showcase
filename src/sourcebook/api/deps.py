@@ -26,7 +26,7 @@ class Container:
 
 
 def get_container(request: Request) -> Container:
-    container: Container = request.app.state.container
+    container: Container = request.state.container  # set by the lifespan
     return container
 
 
