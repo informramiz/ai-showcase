@@ -317,3 +317,5 @@ a { color: inherit; }
   .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .main { padding-top: 32px; }
 }
+
+.step-note { list-style: none; color: var(--muted); font-size: 13px; padding-left: 40px; }

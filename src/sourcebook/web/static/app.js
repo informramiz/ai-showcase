@@ -58,6 +58,8 @@ function renderAnswer(raw, streaming) {
 const TOOL_LABEL = { search_documents: "Searched documents", calculate: "Calculated" };
 
 function traceThinking(text) {
+  // Not every model or effort level sends a thinking summary; never open an empty step.
+  if (!state.thinkingItem && !text.trim()) return;
   let item = state.thinkingItem;
   if (!item) {
     item = document.createElement("li");
@@ -71,7 +73,11 @@ function traceThinking(text) {
 
 function endThinking() {
   if (state.thinkingItem) {
-    state.thinkingItem.classList.remove("is-running");
+    if ($(".thinking-text", state.thinkingItem).textContent.trim()) {
+      state.thinkingItem.classList.remove("is-running");
+    } else {
+      state.thinkingItem.remove();
+    }
     state.thinkingItem = null;
   }
 }
@@ -196,6 +202,9 @@ function stream(url) {
     renderAnswer(d.text, false);
     d.citations.forEach(addSource);
     setStatus("done", "Answered");
+    if (!els.trace.children.length) {
+      els.trace.innerHTML = `<li class="step step-note">The model answered directly: no thinking summary or tool calls for this question.</li>`;
+    }
     els.meta.textContent = formatMeta(d);
     finish();
   });
