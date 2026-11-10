@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sourcebook · Ask your documents</title>
+  <meta name="description" content="Document Q&amp;A with streamed, cited answers. FastAPI + Claude.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%237c5cff'/><path d='M9 9h9a5 5 0 0 1 5 5v9H14a5 5 0 0 1-5-5z' fill='white'/></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+  <script src="{{ url_for('static', path='vendor/htmx.min.js') }}" defer></script>
+  <script type="module" src="{{ url_for('static', path='app.js') }}"></script>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M9 9h9a5 5 0 0 1 5 5v9H14a5 5 0 0 1-5-5z"/></svg>
+        </span>
+        <span>
+          <strong>Sourcebook</strong>
+          <small>Answers you can check</small>
+        </span>
+      </a>
+
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Library</h2>
+          <button class="ghost-btn" type="button" data-open="add-doc">+ Add</button>
+        </header>
+        <div id="library" hx-get="/ui/documents" hx-trigger="library:refresh from:body">
+          {% include "partials/library.html" %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head"><h2>Recent questions</h2></header>
+        <ul class="history" id="history">
+          {% for q in history %}
+          <li>
+            <button type="button" class="history-item" data-question='{{ q | tojson }}'>
+              <span class="dot dot-{{ q.status }}"></span>
+              <span class="history-text">{{ q.question }}</span>
+            </button>
+          </li>
+          {% else %}
+          <li class="muted small empty-history">Questions you ask show up here.</li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <footer class="sidebar-foot">
+        <span class="provider-pill {{ 'is-live' if provider != 'fake' else '' }}">
+          <span class="pulse"></span>
+          {% if provider == 'fake' %}Demo model (no API key){% else %}{{ provider }}{% endif %}
+        </span>
+        <a href="/docs" class="muted small">API docs</a>
+      </footer>
+    </aside>
+
+    <main class="main">
+      <section class="hero" id="hero">
+        <p class="eyebrow">RAG · tool use · streaming</p>
+        <h1>Ask your documents.<br><span class="grad">Get answers with receipts.</span></h1>
+        <p class="lede">Every claim links to the exact sentence it came from. Watch the model search, calculate and write in real time.</p>
+      </section>
+
+      <form class="ask" id="ask-form" autocomplete="off">
+        <div class="ask-box">
+          <svg class="ask-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <textarea id="question" name="question" rows="1" maxlength="1000"
+                    placeholder="Ask anything about your documents..." required></textarea>
+          <button class="send" type="submit" id="send-btn">
+            <span>Ask</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        <div class="examples" id="examples">
+          {% for example in examples %}
+          <button type="button" class="chip" data-example="{{ example }}">{{ example }}</button>
+          {% endfor %}
+        </div>
+      </form>
+
+      <section class="answer-area" id="answer-area" hidden>
+        <div class="question-echo" id="question-echo"></div>
+
+        <div class="grid">
+          <article class="card answer-card">
+            <header class="card-head">
+              <span class="badge" id="answer-status"><span class="spinner"></span>Thinking</span>
+              <span class="meta" id="answer-meta"></span>
+            </header>
+            <div class="answer-body" id="answer-body"></div>
+            <div class="sources" id="sources" hidden>
+              <h3>Sources</h3>
+              <ol class="source-list" id="source-list"></ol>
+            </div>
+          </article>
+
+          <aside class="card trace-card">
+            <header class="card-head"><h3>How it got there</h3></header>
+            <ol class="trace" id="trace"></ol>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="modal" id="add-doc">
+    <form class="modal-body" id="add-doc-form" hx-post="/ui/documents" hx-target="#library" hx-encoding="multipart/form-data">
+      <header class="modal-head">
+        <h2>Add a document</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">×</button>
+      </header>
+      <label class="field">
+        <span>Title <em>(optional)</em></span>
+        <input name="title" maxlength="120" placeholder="Defaults to the first heading">
+      </label>
+      <label class="drop">
+        <input type="file" name="file" accept=".md,.markdown,.txt">
+        <span class="drop-inner">
+          <strong>Drop a .md or .txt file</strong>
+          <small>or click to browse · up to 500 KB</small>
+        </span>
+      </label>
+      <div class="or"><span>or paste text</span></div>
+      <label class="field">
+        <textarea name="content" rows="7" placeholder="# Parental leave&#10;&#10;Employees receive 16 weeks of paid leave..."></textarea>
+      </label>
+      <footer class="modal-foot">
+        <button type="button" class="ghost-btn" data-close>Cancel</button>
+        <button type="submit" class="primary-btn">Add to library</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="modal modal-wide" id="doc-viewer">
+    <div class="modal-body">
+      <header class="modal-head">
+        <h2 id="doc-title">Document</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Close">×</button>
+      </header>
+      <div class="doc-content" id="doc-content"></div>
+    </div>
+  </dialog>
+</body>
+</html>

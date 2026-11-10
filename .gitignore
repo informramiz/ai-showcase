@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+
+# Local state and secrets
+data/
+.env
+.env.*
+!.env.example
+
+# Tooling
+.astro/
+.DS_Store
+.playwright-mcp/

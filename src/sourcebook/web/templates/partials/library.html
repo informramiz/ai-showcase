@@ -1,0 +1,21 @@
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+<ul class="doc-list">
+  {% for doc in documents %}
+  <li class="doc {{ 'is-new' if added == doc.id else '' }}">
+    <button type="button" class="doc-open" data-doc="{{ doc.id }}">
+      <span class="doc-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/></svg>
+      </span>
+      <span class="doc-text">
+        <span class="doc-title">{{ doc.title }}</span>
+        <span class="doc-meta">{{ doc.word_count }} words · {{ doc.chunk_count }} sections</span>
+      </span>
+    </button>
+    <button type="button" class="icon-btn doc-delete" aria-label="Delete {{ doc.title }}"
+            hx-delete="/ui/documents/{{ doc.id }}" hx-target="#library"
+            hx-confirm="Delete “{{ doc.title }}”?">×</button>
+  </li>
+  {% else %}
+  <li class="muted small">No documents yet. Add one to start asking.</li>
+  {% endfor %}
+</ul>
