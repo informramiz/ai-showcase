@@ -10,6 +10,7 @@ from sourcebook.ports.repositories import DocumentRepository
 from sourcebook.services.chunking import chunk_document, derive_title
 
 MIN_CONTENT_CHARS = 20
+MAX_TITLE_CHARS = 120
 
 
 class ReadableUpload(Protocol):
@@ -44,6 +45,8 @@ class DocumentService:
             raise ValidationError("Document is empty or too short to index.")
         chunks = chunk_document(text)
         name = (title or "").strip() or derive_title(text, fallback or "Untitled document")
+        if len(name) > MAX_TITLE_CHARS:
+            raise ValidationError(f"Title is longer than {MAX_TITLE_CHARS} characters.")
         return await self._documents.add(name, text, chunks)
 
     async def ingest_upload(self, filename: str, data: bytes, title: str | None = None) -> Document:
