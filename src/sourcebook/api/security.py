@@ -19,6 +19,8 @@ def install_security_headers(app: FastAPI) -> None:
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         if not request.url.path.startswith(SELF_HOSTED_DOCS):
             response.headers.setdefault("Content-Security-Policy", CSP)
         return response

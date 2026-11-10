@@ -212,6 +212,8 @@ def test_rate_question_reads_then_computes(client: TestClient) -> None:
 def test_security_headers_on_ui_but_not_blocking_swagger(client: TestClient) -> None:
     page = client.get("/")
     assert page.headers["x-content-type-options"] == "nosniff"
+    assert page.headers["x-frame-options"] == "DENY"
+    assert page.headers["cross-origin-opener-policy"] == "same-origin"
     assert "default-src 'self'" in page.headers["content-security-policy"]
     assert "content-security-policy" not in client.get("/docs").headers
 
