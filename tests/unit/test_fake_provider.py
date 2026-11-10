@@ -1,4 +1,4 @@
-from sourcebook.adapters.llm.fake import FakeProvider, _expression
+from sourcebook.adapters.llm.fake import FakeProvider, _expression, _follow_up_expression
 from sourcebook.domain.models import SearchHit
 from sourcebook.ports.llm import (
     CitationChunk,
@@ -85,3 +85,12 @@ async def test_token_delay_is_honoured() -> None:
     events = [e async for e in provider.stream_turn(TurnRequest("s", (UserMessage("hi"),)))]
     assert provider.name == "fake"
     assert isinstance(events[-1], TurnCompleted)
+
+
+async def test_rate_times_quantity_triggers_a_second_tool_round() -> None:
+    hit = SearchHit(1, "T", 0, "Meals", ("The allowance is $1,075 per day.",), 1.0)
+    assert _follow_up_expression("cost for 3 days?", [(hit, hit.sentences[0])]) == "1075 * 3"
+    assert _follow_up_expression("cost per day?", [(hit, hit.sentences[0])]) is None
+    assert _follow_up_expression("cost for 3 days?", []) is None
+    plain = SearchHit(1, "T", 0, "Meals", ("No amount here.",), 1.0)
+    assert _follow_up_expression("for 3 days", [(plain, plain.sentences[0])]) is None

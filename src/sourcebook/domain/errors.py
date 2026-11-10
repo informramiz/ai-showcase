@@ -16,6 +16,10 @@ class ValidationError(SourcebookError):
     """Input is well-formed but breaks a domain rule (empty document, too large, ...)."""
 
 
+class TooLargeError(ValidationError):
+    """The input is bigger than the configured limit."""
+
+
 class ProviderError(SourcebookError):
     """The language model could not produce an answer. Message is safe to show users."""
 

@@ -27,6 +27,10 @@ from sourcebook.ports.llm import (
 
 _WORD = re.compile(r"[a-z0-9']+")
 _EXPRESSION = re.compile(r"\d[\d,.]*(?:\s*[-+*/x\u00d7]\s*\(?\s*\d[\d,.]*\)?)+")
+_MULTIPLIER = re.compile(
+    r"\b(\d+)\s+(?:days?|nights?|weeks?|months?|people|persons?|times|shifts?|trips?)\b"
+)
+_AMOUNT = re.compile(r"[$\u20ac\u00a3]\s?(\d[\d,]*(?:\.\d+)?)")
 _STOP = frozenset(
     [
         "a",
@@ -121,6 +125,13 @@ class FakeProvider:
             (r.text for msg in results for r in msg.results if r.text and "=" in r.text), None
         )
         picked = _best_sentences(question, hits)
+        follow_up = None if calc else _follow_up_expression(question, picked)
+        if follow_up:
+            # A second tool round, like a real model would do: read first, then compute.
+            yield ThinkingChunk(f"The documents give the rate; {follow_up} gets the total.")
+            call = ToolCall("fake_calc_2", "calculate", {"expression": follow_up})
+            yield TurnCompleted(AssistantMessage("", (call,)), "tool_use")
+            return
 
         text_parts: list[str] = []
         if not picked:
@@ -166,6 +177,17 @@ def _expression(question: str) -> str | None:
     if not match:
         return None
     return match.group(0).replace("\u00d7", "*").replace("x", "*").replace(",", "")
+
+
+def _follow_up_expression(question: str, picked: list[tuple[SearchHit, str]]) -> str | None:
+    """'3 days' in the question plus '$75' in the best sentence becomes '75 * 3'."""
+    multiplier = _MULTIPLIER.search(question.lower())
+    if not multiplier or not picked:
+        return None
+    amount = _AMOUNT.search(picked[0][1])
+    if not amount:
+        return None
+    return f"{amount.group(1).replace(',', '')} * {multiplier.group(1)}"
 
 
 def _stem(word: str) -> str:

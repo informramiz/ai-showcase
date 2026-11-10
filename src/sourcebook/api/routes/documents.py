@@ -12,6 +12,7 @@ from sourcebook.api.schemas import DocumentIn, DocumentOut, DocumentSummary, Err
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 _ERRORS: dict[int | str, dict[str, object]] = {
     404: {"model": ErrorOut},
+    413: {"model": ErrorOut},
     422: {"model": ErrorOut},
 }
 
@@ -32,7 +33,7 @@ async def upload_document(
     file: Annotated[UploadFile, File(description="A .md or .txt file")],
     title: Annotated[str | None, Form(max_length=120)] = None,
 ) -> DocumentOut:
-    data = await file.read()
+    data = await documents.read_upload(file)
     return DocumentOut.of(await documents.ingest_upload(file.filename or "upload.txt", data, title))
 
 

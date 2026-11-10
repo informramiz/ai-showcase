@@ -3,6 +3,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+HTMX = {"HX-Request": "true"}
+TOO_BIG = b"x" * 512_001  # one byte over the default 500 KB limit
 NOTE = "# Parental leave\n\nEmployees receive sixteen weeks of paid parental leave."
 
 
@@ -62,6 +64,24 @@ def test_upload(empty_client: TestClient) -> None:
         "/api/documents/upload", files={"file": ("x.pdf", b"%PDF-1.7 binary", "application/pdf")}
     )
     assert bad.status_code == 422
+
+
+def test_oversized_upload_is_rejected_with_413(empty_client: TestClient) -> None:
+    response = empty_client.post(
+        "/api/documents/upload", files={"file": ("huge.txt", TOO_BIG, "text/plain")}
+    )
+    assert response.status_code == 413
+    assert "larger than 512 KB" in response.json()["detail"]
+    assert empty_client.get("/api/documents").json() == []
+
+
+def test_oversized_ui_upload_is_rejected_with_413(empty_client: TestClient) -> None:
+    response = empty_client.post(
+        "/ui/documents", files={"file": ("huge.txt", TOO_BIG, "text/plain")}, headers=HTMX
+    )
+    assert response.status_code == 413
+    assert 'class="alert"' in response.text
+    assert empty_client.get("/api/documents").json() == []
 
 
 def test_question_lifecycle_streams_a_cited_answer(client: TestClient) -> None:
@@ -129,25 +149,61 @@ def test_ui_page_and_library_partials(client: TestClient) -> None:
     library = client.get("/ui/documents")
     assert library.text.count('class="doc-open"') == 4
 
-    added = client.post("/ui/documents", data={"content": NOTE})
+    added = client.post("/ui/documents", data={"content": NOTE}, headers=HTMX)
     assert "Parental leave" in added.text
     assert "is-new" in added.text
 
     uploaded = client.post(
-        "/ui/documents", files={"file": ("benefits.txt", b"Dental cover is included for staff.")}
+        "/ui/documents",
+        files={"file": ("benefits.txt", b"Dental cover is included for staff.")},
+        headers=HTMX,
     )
     assert "Benefits" in uploaded.text
 
-    rejected = client.post("/ui/documents", data={"content": "tiny"})
+    rejected = client.post("/ui/documents", data={"content": "tiny"}, headers=HTMX)
     assert 'class="alert"' in rejected.text
 
     doc_id = client.get("/api/documents").json()[0]["id"]
-    removed = client.delete(f"/ui/documents/{doc_id}")
+    removed = client.delete(f"/ui/documents/{doc_id}", headers=HTMX)
     assert removed.text.count('class="doc-open"') == 5
-    assert 'class="alert"' in client.delete(f"/ui/documents/{doc_id}").text
+    assert 'class="alert"' in client.delete(f"/ui/documents/{doc_id}", headers=HTMX).text
+
+
+def test_ui_writes_require_same_origin_htmx(client: TestClient) -> None:
+    doc_id = client.get("/api/documents").json()[0]["id"]
+    attempts = [
+        client.post("/ui/documents", data={"content": NOTE}),
+        client.delete(f"/ui/documents/{doc_id}"),
+        client.post(
+            "/ui/documents",
+            data={"content": NOTE},
+            headers={**HTMX, "Origin": "https://evil.example"},
+        ),
+    ]
+    assert [r.status_code for r in attempts] == [403, 403, 403]
+    assert len(client.get("/api/documents").json()) == 4
+
+    same_origin = client.post(
+        "/ui/documents", data={"content": NOTE}, headers={**HTMX, "Origin": "http://testserver"}
+    )
+    assert same_origin.status_code == 200
 
 
 def test_openapi_schema_is_served(client: TestClient) -> None:
     paths = client.get("/openapi.json").json()["paths"]
     assert "/api/questions/{question_id}/stream" in paths
     assert "/" not in paths
+
+
+def test_rate_question_reads_then_computes(client: TestClient) -> None:
+    question = client.post(
+        "/api/questions",
+        json={
+            "question": "What is the daily meal limit when travelling, and what would 3 days cost?"
+        },
+    ).json()
+    events = parse_sse(client.get(question["stream_url"]).text)
+    calls = [d for n, d in events if n == "tool_call"]
+    assert [c["name"] for c in calls] == ["search_documents", "calculate"]
+    assert calls[1]["input"] == {"expression": "75 * 3"}
+    assert "225" in events[-1][1]["text"]

@@ -319,6 +319,14 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// htmx skips swapping 4xx responses by default; the library partial carries its own alert.
+document.body.addEventListener("htmx:beforeSwap", (e) => {
+  if (e.detail.target.id === "library" && e.detail.xhr.status === 413) {
+    e.detail.shouldSwap = true;
+    e.detail.isError = false;
+  }
+});
+
 // Close the add-document dialog once the library re-renders without an error.
 document.body.addEventListener("htmx:afterSwap", (e) => {
   if (e.detail.target.id !== "library") return;

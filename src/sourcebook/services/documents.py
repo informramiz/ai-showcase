@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sourcebook.domain.errors import NotFoundError, ValidationError
+from typing import Protocol
+
+from sourcebook.domain.errors import NotFoundError, TooLargeError, ValidationError
 from sourcebook.domain.models import Document
 from sourcebook.ports.repositories import DocumentRepository
 from sourcebook.services.chunking import chunk_document, derive_title
@@ -10,17 +12,34 @@ from sourcebook.services.chunking import chunk_document, derive_title
 MIN_CONTENT_CHARS = 20
 
 
+class ReadableUpload(Protocol):
+    """Anything with an async, size-limited read (FastAPI's UploadFile fits)."""
+
+    async def read(self, size: int = -1) -> bytes: ...
+
+
 class DocumentService:
     def __init__(self, documents: DocumentRepository, max_bytes: int) -> None:
         self._documents = documents
         self._max_bytes = max_bytes
+
+    @property
+    def max_bytes(self) -> int:
+        return self._max_bytes
+
+    async def read_upload(self, file: ReadableUpload) -> bytes:
+        """Read at most max_bytes + 1 so an oversized upload never lands in memory whole."""
+        data = await file.read(self._max_bytes + 1)
+        if len(data) > self._max_bytes:
+            raise TooLargeError(f"Document is larger than {self._max_bytes // 1000} KB.")
+        return data
 
     async def ingest(
         self, content: str, title: str | None = None, *, fallback: str = ""
     ) -> Document:
         text = content.replace("\r\n", "\n").strip()
         if len(text.encode()) > self._max_bytes:
-            raise ValidationError(f"Document is larger than {self._max_bytes // 1000} KB.")
+            raise TooLargeError(f"Document is larger than {self._max_bytes // 1000} KB.")
         if len(text) < MIN_CONTENT_CHARS:
             raise ValidationError("Document is empty or too short to index.")
         chunks = chunk_document(text)
@@ -31,7 +50,7 @@ class DocumentService:
         if not filename.lower().endswith((".md", ".markdown", ".txt")):
             raise ValidationError("Only .md and .txt files are supported.")
         if len(data) > self._max_bytes:
-            raise ValidationError(f"Document is larger than {self._max_bytes // 1000} KB.")
+            raise TooLargeError(f"Document is larger than {self._max_bytes // 1000} KB.")
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError as exc:
