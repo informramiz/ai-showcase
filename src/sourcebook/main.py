@@ -16,10 +16,11 @@ from sourcebook.adapters.llm.fake import FakeProvider
 from sourcebook.adapters.sqlite.database import connect
 from sourcebook.adapters.sqlite.documents import SqliteDocumentRepository
 from sourcebook.adapters.sqlite.questions import SqliteQuestionRepository
-from sourcebook.api.deps import Container
+from sourcebook.api.deps import Container, ContainerDep
 from sourcebook.api.errors import register_error_handlers
 from sourcebook.api.routes import documents, questions, ui
 from sourcebook.api.schemas import HealthOut
+from sourcebook.api.security import install_security_headers
 from sourcebook.config import Settings, get_settings
 from sourcebook.ports.llm import LLMProvider
 from sourcebook.services.answering import AnswerService
@@ -36,9 +37,11 @@ def build_provider(settings: Settings) -> LLMProvider:
         return FakeProvider(token_delay=0.012)
     if settings.anthropic_api_key is None:
         raise RuntimeError("SOURCEBOOK_PROVIDER=anthropic needs ANTHROPIC_API_KEY to be set.")
-    client = build_client(settings.anthropic_api_key.get_secret_value())
+    base_url = str(settings.anthropic_base_url) if settings.anthropic_base_url else None
+    client = build_client(settings.anthropic_api_key.get_secret_value(), base_url)
     return AnthropicProvider(
         client,
+        server_fallback=base_url is None,
         model=settings.model,
         effort=settings.effort,
         max_tokens=settings.max_output_tokens,
@@ -59,7 +62,7 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
     settings = settings or get_settings()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_app: FastAPI) -> AsyncIterator[dict[str, Container]]:
         db = await connect(settings.database_path)
         document_repo = SqliteDocumentRepository(db)
         document_service = DocumentService(document_repo, settings.max_upload_bytes)
@@ -73,9 +76,9 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         if settings.seed_samples and await document_repo.count() == 0:
             logger.info("Seeded %d sample documents", await seed_samples(document_service))
         logger.info("Sourcebook ready, provider=%s", llm.name)
-        app.state.container = Container(settings, db, document_repo, document_service, answers)
+        container = Container(settings, db, document_repo, document_service, answers)
         try:
-            yield
+            yield {"container": container}
         finally:
             await db.close()
 
@@ -86,14 +89,14 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
         lifespan=lifespan,
     )
     register_error_handlers(app)
+    install_security_headers(app)
     app.include_router(documents.router)
     app.include_router(questions.router)
     app.include_router(ui.router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/api/health", tags=["meta"])
-    async def health() -> HealthOut:
-        container: Container = app.state.container
+    async def health(container: ContainerDep) -> HealthOut:
         return HealthOut(
             status="ok",
             provider=container.answers.provider_name,

@@ -207,3 +207,18 @@ def test_rate_question_reads_then_computes(client: TestClient) -> None:
     assert [c["name"] for c in calls] == ["search_documents", "calculate"]
     assert calls[1]["input"] == {"expression": "75 * 3"}
     assert "225" in events[-1][1]["text"]
+
+
+def test_security_headers_on_ui_but_not_blocking_swagger(client: TestClient) -> None:
+    page = client.get("/")
+    assert page.headers["x-content-type-options"] == "nosniff"
+    assert "default-src 'self'" in page.headers["content-security-policy"]
+    assert "content-security-policy" not in client.get("/docs").headers
+
+
+def test_overlong_title_is_rejected(empty_client: TestClient) -> None:
+    response = empty_client.post(
+        "/ui/documents", data={"content": NOTE, "title": "t" * 121}, headers=HTMX
+    )
+    assert response.status_code == 200
+    assert "Title is longer" in response.text

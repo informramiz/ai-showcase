@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = Field(
         default=None,
         validation_alias=AliasChoices("ANTHROPIC_API_KEY", "SOURCEBOOK_ANTHROPIC_API_KEY"),
+    )
+    anthropic_base_url: AnyHttpUrl | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ANTHROPIC_BASE_URL", "SOURCEBOOK_ANTHROPIC_BASE_URL"),
+        description="Anthropic-compatible gateway, e.g. https://openrouter.ai/api",
     )
     provider: ProviderChoice = ProviderChoice.AUTO
     model: str = "claude-opus-5-5"

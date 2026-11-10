@@ -124,6 +124,16 @@ tests/
   api/                 HTTP tests through TestClient, SSE parsing, UI partials, security
 ```
 
+### Live-tested with a real model
+
+Run on 2026-11-10 against `anthropic/claude-sonnet-5.5` through [OpenRouter's Anthropic-compatible endpoint](https://openrouter.ai/docs/guides/guides/claude-code-integration), using the official `anthropic` SDK with `base_url`. Search, calculation, native citations opening the right sentence, upload, replay and a bad-key error all behaved correctly (`tests/live`, plus the screenshots below).
+
+| Real-model answer | Cited sentence highlighted |
+| --- | --- |
+| <img src="docs/screenshots/sb-live-answer.png" width="400"> | <img src="docs/screenshots/sb-live-viewer.png" width="400"> |
+
+Limits found while testing: OpenRouter rejects the Anthropic-only server-side `fallbacks` option, so Sourcebook leaves it off whenever a base URL is set. Thinking summaries did not appear in the trace for simple questions on this model. Replay was checked through the API, not by clicking in the UI. Direct api.anthropic.com was not tested (no key available), nor the Docker image.
+
 ## Run
 
 You need [uv](https://docs.astral.sh/uv/). It installs the right Python (3.13) itself.
@@ -142,6 +152,14 @@ uv run sourcebook
 cp .env.example .env
 # put your key in .env as ANTHROPIC_API_KEY=...  (or export it in your shell)
 uv run sourcebook
+```
+
+**Through OpenRouter** (or another Anthropic-compatible gateway): set `ANTHROPIC_API_KEY` to the gateway key, `ANTHROPIC_BASE_URL=https://openrouter.ai/api` and `SOURCEBOOK_MODEL=anthropic/claude-sonnet-5.5`.
+
+Optional live smoke test (calls the real model, skipped by default):
+
+```bash
+ANTHROPIC_API_KEY=... uv run pytest -m live
 ```
 
 The sidebar shows which model is answering. `SOURCEBOOK_PROVIDER=auto` (default) uses Claude when a key is set and the demo model otherwise; `fake` and `anthropic` force one. Model and effort are configurable (`SOURCEBOOK_MODEL`, default `claude-opus-5-5`; `SOURCEBOOK_EFFORT`, default `medium`). See `.env.example` for all settings. Keys are only read from the environment and held as `SecretStr`, so they never show up in logs or reprs.
@@ -181,7 +199,7 @@ uv run mypy                       # strict, src and tests
 uv run pytest --cov               # branch coverage, fails under 85%
 ```
 
-**113 tests** (100 unit, 13 API), **98.8% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
+**118 tests** plus 5 opt-in live tests, **98.6% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
 
 CI (GitHub Actions) runs lint, format check, mypy and tests with coverage, then builds the Docker image, starts it and polls `/api/health`.
 
@@ -190,6 +208,7 @@ CI (GitHub Actions) runs lint, format check, mypy and tests with coverage, then 
 - **No secrets in the repo.** `.env` is git-ignored; `.env.example` holds placeholders only.
 - **Bounded uploads.** Uploads are read with `read(max_bytes + 1)`, and anything over the limit (512 KB by default) is refused with 413, in both the JSON API and the UI.
 - **CSRF on UI writes.** `POST` and `DELETE` under `/ui/documents` require the `HX-Request: true` header that htmx sends and, when the browser sends `Origin`, it must match `Host`. A cross-site form cannot set that header, and a cross-site `fetch` that tries triggers a CORS preflight the app never approves.
+- **Browser hardening.** Responses carry a strict `Content-Security-Policy` (self-hosted assets only; `/docs` is exempt because Swagger UI loads from a CDN), `X-Content-Type-Options: nosniff` and `Referrer-Policy`.
 - **Escaped output.** Jinja2 autoescapes templates. In `app.js` all model and user text goes through one `escapeHtml` before it reaches the DOM.
 - **Validated tool inputs.** Every tool parses its input with Pydantic before running. The calculator walks a Python AST with an allow-list of operators and caps exponents; it never calls `eval`.
 - **Parameterised SQL** everywhere, and search text is turned into quoted FTS5 terms so query syntax cannot be injected.
@@ -209,5 +228,6 @@ There is no authentication: this is a single-user demo. A multi-user deployment 
 
 ### Known limits
 
-- The Claude provider is covered by unit tests against a stubbed SDK stream. The screenshots and API tests use the demo model.
+- Beyond the stubbed unit tests, the Claude provider was run live once, through OpenRouter (see above). The demo-model screenshots and API tests do not call a model.
+- No rate limiting: each question costs model tokens, so put a limit in front of a public deployment.
 - Upload size is enforced when the handler reads the file. Starlette still spools the multipart body to a temporary file first, so a production deployment should also cap request size at the proxy (for example `client_max_body_size` in nginx).

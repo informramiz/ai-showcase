@@ -7,6 +7,7 @@ Choices, each from the Claude API docs:
 - `eager_input_streaming` on client tools; parsed inputs are validated by each tool (Pydantic).
 - Top-level `cache_control` caches the stable prefix (tools + system prompt) across turns.
 - `fallbacks="default"` lets the API retry on a fallback model when the primary is overloaded.
+  Only sent to Anthropic itself: OpenRouter's Messages endpoint rejects it (live-tested).
 """
 
 from __future__ import annotations
@@ -55,15 +56,22 @@ class AnthropicProvider:
         model: str,
         effort: str = "medium",
         max_tokens: int = 16_000,
+        server_fallback: bool = True,
     ) -> None:
         self._client = client
         self._model = model
         self._effort = effort
         self._max_tokens = max_tokens
+        self._server_fallback = server_fallback
 
     @property
     def name(self) -> str:
         return self._model
+
+    def _fallback_options(self) -> dict[str, Any]:
+        if not self._server_fallback:
+            return {}
+        return {"fallbacks": "default", "betas": [FALLBACK_BETA]}
 
     async def stream_turn(self, request: TurnRequest) -> AsyncIterator[TurnEvent]:
         try:
@@ -76,8 +84,7 @@ class AnthropicProvider:
                 thinking={"type": "adaptive", "display": "summarized"},
                 output_config=cast("Any", {"effort": self._effort}),
                 cache_control={"type": "ephemeral"},
-                fallbacks="default",
-                betas=[FALLBACK_BETA],
+                **self._fallback_options(),
             ) as stream:
                 async for event in stream:
                     if event.type == "thinking":
@@ -98,7 +105,7 @@ class AnthropicProvider:
             logger.warning("Model produced malformed tool input: %s", exc)
             raise ProviderError("The model produced malformed tool input. Please retry.") from exc
         except anthropic.AuthenticationError as exc:
-            raise ProviderError("The Anthropic API key was rejected.") from exc
+            raise ProviderError("The API key was rejected by the model provider.") from exc
         except anthropic.PermissionDeniedError as exc:
             raise ProviderError("This API key cannot use the configured model.") from exc
         except anthropic.NotFoundError as exc:
@@ -197,5 +204,6 @@ def to_citation(citation: object) -> Citation | None:
     )
 
 
-def build_client(api_key: str) -> AsyncAnthropic:
-    return AsyncAnthropic(api_key=api_key, max_retries=2)
+def build_client(api_key: str, base_url: str | None = None) -> AsyncAnthropic:
+    """`base_url` points the SDK at an Anthropic-compatible gateway such as OpenRouter."""
+    return AsyncAnthropic(api_key=api_key, base_url=base_url, max_retries=2)

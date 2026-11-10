@@ -80,17 +80,22 @@ class SqliteDocumentRepository:
 
     async def add(self, title: str, content: str, chunks: Sequence[NewChunk]) -> Document:
         created = datetime.now(UTC)
-        cursor = await self._db.execute(
-            "INSERT INTO documents (title, content, created_at) VALUES (?, ?, ?)",
-            (title, content, created.isoformat()),
-        )
-        document_id = cursor.lastrowid
-        assert document_id is not None
-        await self._db.executemany(
-            "INSERT INTO chunks (document_id, ordinal, heading, text) VALUES (?, ?, ?, ?)",
-            [(document_id, c.ordinal, c.heading, c.text) for c in chunks],
-        )
-        await self._db.commit()
+        try:
+            cursor = await self._db.execute(
+                "INSERT INTO documents (title, content, created_at) VALUES (?, ?, ?)",
+                (title, content, created.isoformat()),
+            )
+            document_id = cursor.lastrowid
+            assert document_id is not None
+            await self._db.executemany(
+                "INSERT INTO chunks (document_id, ordinal, heading, text) VALUES (?, ?, ?, ?)",
+                [(document_id, c.ordinal, c.heading, c.text) for c in chunks],
+            )
+            await self._db.commit()
+        except BaseException:
+            # The connection is shared: never leave half a document for the next commit.
+            await self._db.rollback()
+            raise
         return Document(document_id, title, content, created, len(chunks))
 
     async def get(self, document_id: int) -> Document | None:
