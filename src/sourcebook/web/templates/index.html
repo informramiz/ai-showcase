@@ -51,11 +51,11 @@
       </section>
 
       <footer class="sidebar-foot">
-        <span class="provider-pill {{ 'is-live' if provider != 'fake' else '' }}">
+        <span class="provider-pill {{ 'is-live' if provider != 'fake' else '' }}" title="{{ 'Demo model (no API key)' if provider == 'fake' else provider }}">
           <span class="pulse"></span>
-          {% if provider == 'fake' %}Demo model (no API key){% else %}{{ provider }}{% endif %}
+          <span class="provider-name">{% if provider == 'fake' %}Demo model (no API key){% else %}{{ provider.rsplit('/', 1)[-1] }}{% endif %}</span>
         </span>
-        <a href="/docs" class="muted small">API docs</a>
+        <a href="/docs" class="muted small nowrap">API docs</a>
       </footer>
     </aside>
 
