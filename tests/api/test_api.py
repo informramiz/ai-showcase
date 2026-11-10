@@ -4,7 +4,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 HTMX = {"HX-Request": "true"}
-TOO_BIG = b"x" * 512_001  # one byte over the default 500 KB limit
+TOO_BIG = b"x" * 512_001  # one byte over the default 512 KB limit
 NOTE = "# Parental leave\n\nEmployees receive sixteen weeks of paid parental leave."
 
 
