@@ -125,12 +125,14 @@ a { color: inherit; }
 .dot-pending { background: var(--warn); }
 .empty-history { padding: 4px 8px; }
 
-.sidebar-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; padding: 10px 6px 0; border-top: 1px solid var(--line); }
+.sidebar-foot { margin-top: auto; gap: 10px; display: flex; justify-content: space-between; align-items: center; padding: 10px 6px 0; border-top: 1px solid var(--line); }
 .provider-pill {
   display: inline-flex; align-items: center; gap: 8px; font-size: 12px;
   padding: 5px 10px; border-radius: 99px; background: rgba(251, 191, 36, 0.1); color: #fde68a;
-  border: 1px solid rgba(251, 191, 36, 0.25);
+  border: 1px solid rgba(251, 191, 36, 0.25); min-width: 0;
 }
+.provider-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nowrap { white-space: nowrap; flex: none; }
 .provider-pill.is-live { background: rgba(52, 211, 153, 0.1); color: #a7f3d0; border-color: rgba(52, 211, 153, 0.3); }
 .pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
 @keyframes pulse { 50% { opacity: 0.35; } }

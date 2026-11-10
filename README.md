@@ -232,7 +232,7 @@ There is no authentication: this is a single-user demo. A multi-user deployment 
 
 ### Known limits
 
-- **Thinking summaries are optional.** Sonnet 5.5 sent none for the questions tested through OpenRouter, so the trace shows only tool steps (or a short note when the model answered directly). The UI never renders an empty thinking step. Effort is not raised just to force one.
+- **Thinking summaries are optional.** Sonnet 5.5 sent one for a plain greeting at medium effort but none at low effort, so the trace may show only tool steps, or a short note when the model answered directly (screenshot: `docs/screenshots/sb-live-notrace.png`). The UI never renders an empty thinking step. Effort is not raised just to force one.
 
 - Beyond the stubbed unit tests, the Claude provider was run live once, through OpenRouter (see above). The demo-model screenshots and API tests do not call a model.
 - No rate limiting: each question costs model tokens, so put a limit in front of a public deployment.
