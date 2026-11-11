@@ -6,6 +6,10 @@ Built by Ramiz Raja as a small but complete example of an AI product on a Python
 
 It runs without an API key. A deterministic demo model stands in for Claude, so you can clone, run and click through everything in a minute. Set `ANTHROPIC_API_KEY` and the same app talks to Claude.
 
+![Sourcebook answering a question with a live model: tool steps, a calculation, cited sources and the cited sentence highlighted](docs/demo/sourcebook-demo.gif)
+
+Live run on `anthropic/claude-sonnet-5.5` through OpenRouter. Full 50-second demo (upload, two questions, citation, replay): [docs/demo/sourcebook-demo.mp4](docs/demo/sourcebook-demo.mp4).
+
 ## Features
 
 - **Cited answers.** Answers stream in with numbered markers. Each one opens the source document with the cited sentence highlighted. With Claude these are the API's native citations (`search_result_location`), not references the model typed.
