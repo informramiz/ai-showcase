@@ -206,12 +206,14 @@ function stream(url) {
       els.trace.innerHTML = `<li class="step step-note">The model answered directly: no thinking summary or tool calls for this question.</li>`;
     }
     els.meta.textContent = formatMeta(d);
+    markHistory(d.question_id, "answered");
     finish();
   });
   on("error", (d) => {
     endThinking();
     setStatus("error", "Failed");
     els.body.innerHTML = `<p class="error-text">${escapeHtml(d.message)}</p>`;
+    markHistory(d.question_id, "failed");
     finish();
   });
   // Network-level failure (not our "error" event, which carries data).
@@ -227,12 +229,20 @@ function stream(url) {
 function addHistory(q) {
   $(".empty-history", els.history)?.remove();
   const li = document.createElement("li");
-  li.innerHTML = `<button type="button" class="history-item" data-question="">
+  li.innerHTML = `<button type="button" class="history-item" data-id="${q.id}" data-question="">
     <span class="dot dot-pending"></span><span class="history-text"></span></button>`;
   const btn = $("button", li);
   btn.dataset.question = JSON.stringify(q);
   $(".history-text", li).textContent = q.question;
   els.history.prepend(li);
+}
+
+// Keep the sidebar dot (and the replay payload) in step with the stream's final event.
+function markHistory(id, status) {
+  const btn = els.history.querySelector(`.history-item[data-id="${id}"]`);
+  if (!btn) return;
+  $(".dot", btn).className = `dot dot-${status}`;
+  btn.dataset.question = JSON.stringify({ ...JSON.parse(btn.dataset.question), status });
 }
 
 async function ask(text) {

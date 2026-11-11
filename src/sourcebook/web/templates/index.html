@@ -39,7 +39,7 @@
         <ul class="history" id="history">
           {% for q in history %}
           <li>
-            <button type="button" class="history-item" data-question='{{ q | tojson }}'>
+            <button type="button" class="history-item" data-id="{{ q.id }}" data-question='{{ q | tojson }}'>
               <span class="dot dot-{{ q.status }}"></span>
               <span class="history-text">{{ q.question }}</span>
             </button>
