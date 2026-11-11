@@ -103,6 +103,8 @@ def test_question_lifecycle_streams_a_cited_answer(client: TestClient) -> None:
     assert "citation" in names
     assert names[-1] == "done"
     done = events[-1][1]
+    # The UI finds the sidebar entry by this id to turn its status dot green.
+    assert done["question_id"] == question["id"]
     assert done["provider"] == "fake"
     assert done["citations"][0]["title"].startswith("Security")
     assert done["citations"][0]["document_id"] is not None
@@ -117,6 +119,10 @@ def test_question_lifecycle_streams_a_cited_answer(client: TestClient) -> None:
 
     recent = client.get("/api/questions", params={"limit": 5}).json()
     assert [q["id"] for q in recent] == [question["id"]]
+
+    page = client.get("/").text
+    assert f'data-id="{question["id"]}"' in page
+    assert "dot-answered" in page
 
 
 def test_calculator_tool_shows_up_in_the_stream(client: TestClient) -> None:
