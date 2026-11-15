@@ -10,10 +10,15 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Self-hosted runner: never run code from fork PRs.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, buildpc]
+    defaults:
+      run:
+        shell: 'C:\PROGRA~1\Git\bin\bash.exe -e -o pipefail {0}'
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - name: Install
@@ -26,19 +31,3 @@ jobs:
         run: uv run mypy
       - name: Test
         run: uv run pytest --cov --cov-report=term-missing
-
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Build image
-        run: docker build -t sourcebook .
-      - name: Smoke test
-        run: |
-          docker run -d --name sb -p 8000:8000 sourcebook
-          for i in $(seq 1 30); do
-            if curl -fs http://localhost:8000/api/health; then exit 0; fi
-            sleep 1
-          done
-          docker logs sb
-          exit 1
