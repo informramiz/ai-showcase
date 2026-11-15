@@ -149,7 +149,7 @@ class FakeProvider:
                 async for event in self._words(" ", text_parts):
                     yield event
         if calc:
-            async for event in self._words(f"\n\nWorked out exactly: {calc}.", text_parts):
+            async for event in self._words(f"\n\nWorked out: {calc}.", text_parts):
                 yield event
         yield TurnCompleted(AssistantMessage("".join(text_parts), ()), "end_turn")
 

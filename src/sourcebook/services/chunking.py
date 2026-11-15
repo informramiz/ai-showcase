@@ -10,6 +10,7 @@ _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])")
 _BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 MAX_CHUNK_CHARS = 1_200
+MAX_HEADING_CHARS = 200
 
 
 def split_sentences(text: str) -> tuple[str, ...]:
@@ -54,7 +55,7 @@ def chunk_document(content: str, *, max_chars: int = MAX_CHUNK_CHARS) -> list[Ne
     for line in content.splitlines():
         match = _HEADING.match(line)
         if match:
-            sections.append((match.group(2).strip(), []))
+            sections.append((match.group(2).strip()[:MAX_HEADING_CHARS], []))
         else:
             sections[-1][1].append(line)
 
@@ -66,7 +67,7 @@ def chunk_document(content: str, *, max_chars: int = MAX_CHUNK_CHARS) -> list[Ne
             for piece in _split_long(sentence, max_chars)
         ]
         if not sentences and heading:
-            sentences = [heading]  # heading-only section: keep it searchable
+            sentences = _split_long(heading, max_chars)  # heading-only: keep it searchable
         buffer: list[str] = []
         size = 0
         for sentence in sentences:

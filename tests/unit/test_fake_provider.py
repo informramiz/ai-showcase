@@ -65,7 +65,7 @@ async def test_answer_turn_cites_the_relevant_sentences_only() -> None:
 
     text = "".join(e.text for e in events if isinstance(e, TextChunk))
     assert text.startswith("Here's what your documents say.")
-    assert "Worked out exactly: 75 * 3 = 225." in text
+    assert "Worked out: 75 * 3 = 225." in text
     done = events[-1]
     assert isinstance(done, TurnCompleted)
     assert done.stop_reason == "end_turn"

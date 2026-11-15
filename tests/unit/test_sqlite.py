@@ -124,3 +124,28 @@ async def test_failed_write_does_not_roll_back_a_concurrent_one(
     results = await asyncio.gather(failing(), adding(), return_exceptions=True)
     assert isinstance(results[0], RuntimeError)
     assert [d.title for d in await document_repo.list_all()] == ["Kept"]
+
+
+async def test_upgrading_a_version_1_database_keeps_data_and_stops_id_reuse(tmp_path: Path) -> None:
+    import aiosqlite
+
+    path = tmp_path / "old.db"
+    async with aiosqlite.connect(path) as old:
+        await old.executescript(MIGRATIONS[0] + "PRAGMA user_version = 1;")
+        await old.execute(
+            "INSERT INTO documents VALUES (1, 'Old', 'Old text here.', '2026-01-01T00:00:00+00:00')"
+        )
+        await old.execute("INSERT INTO chunks VALUES (1, 1, 0, 'H', 'Old text here.')")
+        await old.commit()
+
+    db = await connect(path)
+    try:
+        repo = SqliteDocumentRepository(db)
+        kept = await repo.get(1)
+        assert kept is not None
+        assert kept.chunk_count == 1
+        assert [hit.document_id for hit in await repo.search("text", 5)] == [1]
+        assert await repo.delete(1)
+        assert (await repo.add("New", "text", [])).id == 2
+    finally:
+        await db.close()

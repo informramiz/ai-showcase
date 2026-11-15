@@ -302,3 +302,26 @@ def test_replay_rebuilds_events_and_keeps_unknown_markers_as_text() -> None:
         TokenDelta(" c"),
         AnswerCompleted(5, answer),
     ]
+
+
+async def test_empty_final_turn_after_narrated_tool_turn_fails(
+    document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
+) -> None:
+    call = ToolCall("s", "search_documents", {"query": "meal"})
+    narrated: list[TurnEvent] = [
+        TextChunk("Let me search."),
+        TurnCompleted(AssistantMessage("", (call,)), "tool_use", Usage(1, 1)),
+    ]
+    provider = ScriptedProvider([narrated, answer_turn()])
+    _, events = await run(service(provider, document_repo, question_repo), "q?")
+    failed = events[-1]
+    assert isinstance(failed, AnswerFailed)
+    assert "empty answer" in failed.message
+
+
+async def test_unknown_stop_reason_is_a_failure(
+    document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
+) -> None:
+    provider = ScriptedProvider([answer_turn(TextChunk("Partial"), stop="other")])
+    _, events = await run(service(provider, document_repo, question_repo), "q?")
+    assert isinstance(events[-1], AnswerFailed)

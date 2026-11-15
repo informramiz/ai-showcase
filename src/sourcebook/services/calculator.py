@@ -41,6 +41,8 @@ def evaluate(expression: str) -> float:
         raise ValidationError("Division by zero.") from exc
     except OverflowError as exc:
         raise ValidationError("Result is too large.") from exc
+    except TypeError as exc:  # e.g. floor-dividing a complex number from a negative root
+        raise ValidationError("Result is not a real number.") from exc
     if isinstance(result, complex):
         raise ValidationError("Result is not a real number.")
     if not math.isfinite(result):
@@ -51,7 +53,7 @@ def evaluate(expression: str) -> float:
 def format_number(value: float) -> str:
     if value == int(value) and abs(value) < 1e15:
         return f"{int(value):,}"
-    if 0 < abs(value) < 1e-4:
+    if 0 < abs(value) < 1:
         return f"{value:.6g}"
     return f"{value:,.4f}".rstrip("0").rstrip(".")
 

@@ -62,3 +62,11 @@ def test_derive_title_uses_first_heading() -> None:
 
 def test_derive_title_falls_back_and_truncates() -> None:
     assert derive_title("no headings", "x" * 200) == "x" * 120
+
+
+def test_oversized_heading_is_bounded() -> None:
+    heading = "H" * 5_000
+    with_body = chunk_document(f"# {heading}\n\nBody text here.")
+    assert all(len(c.heading) <= 200 for c in with_body)
+    only = chunk_document(f"# {heading}", max_chars=100)
+    assert all(len(c.text) <= 100 for c in only)

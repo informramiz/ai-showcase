@@ -207,7 +207,7 @@ uv run mypy                       # strict, src and tests
 uv run pytest --cov               # branch coverage, fails under 85%
 ```
 
-**132 tests** plus 5 opt-in live tests, **98.4% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
+**140 tests** plus 5 opt-in live tests, **98.4% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
 
 CI (GitHub Actions, on a self-hosted runner) runs lint, format check, mypy and tests with coverage. The runner has no Docker, so the image build and `/api/health` check are done by hand: `docker build -t sourcebook . && docker run -p 8000:8000 sourcebook`.
 
@@ -237,6 +237,7 @@ There is no authentication: this is a single-user demo. A multi-user deployment 
 ### Known limits
 
 - A stream is not resumable: if the connection drops mid-answer the UI shows "Connection lost"; reopen the question from history. Answers that hit the output-token limit, exhaust the search turns or come back empty are saved as failed, not as answers.
+- Citation highlighting is text-based: the viewer finds the cited sentence under the cited heading, so a sentence repeated within one section may highlight its first occurrence.
 - Citations to a deleted document stay in old answers but no longer open anything. Document ids are never reused.
 
 - **Thinking summaries are optional.** Sonnet 5.5 sent one for a plain greeting at medium effort but none at low effort, so the trace may show only tool steps, or a short note when the model answered directly (screenshot: `docs/screenshots/sb-live-notrace.png`). The UI never renders an empty thinking step. Effort is not raised just to force one.

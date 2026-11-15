@@ -254,3 +254,17 @@ def test_heading_only_document_is_indexed(empty_client: TestClient) -> None:
     )
     assert response.status_code == 201
     assert response.json()["chunk_count"] == 1
+
+
+def test_openapi_declares_string_detail_for_every_validated_route(
+    empty_client: TestClient,
+) -> None:
+    spec = empty_client.get("/openapi.json").json()
+    for path, method in [
+        ("/api/questions", "get"),
+        ("/api/questions/{question_id}", "get"),
+        ("/api/documents/{document_id}", "get"),
+    ]:
+        schema = spec["paths"][path][method]["responses"]["422"]["content"]["application/json"]
+        assert schema["schema"]["$ref"].endswith("/ErrorOut")
+    assert empty_client.get("/api/questions?limit=0").json()["detail"].startswith("query.limit")
