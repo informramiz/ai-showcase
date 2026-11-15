@@ -8,48 +8,55 @@ from typing import Any
 
 import aiosqlite
 
+from sourcebook.adapters.sqlite.database import Database
 from sourcebook.domain.models import Answer, Citation, Question, QuestionStatus, ToolStep, Usage
 
 
 class SqliteQuestionRepository:
-    def __init__(self, db: aiosqlite.Connection) -> None:
+    def __init__(self, db: Database) -> None:
         self._db = db
 
     async def create(self, text: str) -> Question:
         created = datetime.now(UTC)
-        cursor = await self._db.execute(
-            "INSERT INTO questions (text, status, created_at) VALUES (?, ?, ?)",
-            (text, QuestionStatus.PENDING.value, created.isoformat()),
-        )
-        await self._db.commit()
+        async with self._db.transaction() as conn:
+            cursor = await conn.execute(
+                "INSERT INTO questions (text, status, created_at) VALUES (?, ?, ?)",
+                (text, QuestionStatus.PENDING.value, created.isoformat()),
+            )
         assert cursor.lastrowid is not None
         return Question(cursor.lastrowid, text, QuestionStatus.PENDING, created)
 
     async def get(self, question_id: int) -> Question | None:
-        async with self._db.execute("SELECT * FROM questions WHERE id = ?", (question_id,)) as cur:
+        async with (
+            self._db.read() as conn,
+            conn.execute("SELECT * FROM questions WHERE id = ?", (question_id,)) as cur,
+        ):
             row = await cur.fetchone()
         return _question(row) if row else None
 
     async def list_recent(self, limit: int) -> list[Question]:
-        async with self._db.execute(
-            "SELECT * FROM questions ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)
-        ) as cur:
+        async with (
+            self._db.read() as conn,
+            conn.execute(
+                "SELECT * FROM questions ORDER BY created_at DESC, id DESC LIMIT ?", (limit,)
+            ) as cur,
+        ):
             rows = await cur.fetchall()
         return [_question(row) for row in rows]
 
     async def save_answer(self, question_id: int, answer: Answer) -> None:
-        await self._db.execute(
-            "UPDATE questions SET status = ?, answer_json = ?, error = NULL WHERE id = ?",
-            (QuestionStatus.ANSWERED.value, json.dumps(answer_to_json(answer)), question_id),
-        )
-        await self._db.commit()
+        async with self._db.transaction() as conn:
+            await conn.execute(
+                "UPDATE questions SET status = ?, answer_json = ?, error = NULL WHERE id = ?",
+                (QuestionStatus.ANSWERED.value, json.dumps(answer_to_json(answer)), question_id),
+            )
 
     async def save_failure(self, question_id: int, message: str) -> None:
-        await self._db.execute(
-            "UPDATE questions SET status = ?, error = ? WHERE id = ?",
-            (QuestionStatus.FAILED.value, message, question_id),
-        )
-        await self._db.commit()
+        async with self._db.transaction() as conn:
+            await conn.execute(
+                "UPDATE questions SET status = ?, error = ? WHERE id = ?",
+                (QuestionStatus.FAILED.value, message, question_id),
+            )
 
 
 def answer_to_json(answer: Answer) -> dict[str, Any]:

@@ -161,6 +161,29 @@ function finish() {
   source = null;
 }
 
+// Where `quote` occurs in `content`: whitespace-tolerant, and when the sentence repeats, the
+// occurrence under the cited section's heading wins.
+function findQuote(content, quote, heading) {
+  const pattern = quote.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+");
+  if (!pattern) return null;
+  const matches = [...content.matchAll(new RegExp(pattern, "g"))];
+  if (!matches.length) return null;
+  const sectionOf = (index) => {
+    const before = content.slice(0, index).match(/^#{1,6}\s+(.+?)\s*#*\s*$/gm);
+    return before ? before[before.length - 1].replace(/^#{1,6}\s+/, "").replace(/\s*#*\s*$/, "") : "";
+  };
+  return matches.find((m) => heading && sectionOf(m.index) === heading) ?? matches[0];
+}
+
+function renderDocument(content, quote, heading) {
+  const match = quote ? findQuote(content, quote, heading) : null;
+  const toHtml = (text) =>
+    escapeHtml(text).replace(/^#{1,6}\s+(.+)$/gm, "<h4>$1</h4>").replace(/\n{2,}/g, "</p><p>");
+  if (!match) return `<p>${toHtml(content)}</p>`;
+  const end = match.index + match[0].length;
+  return `<p>${toHtml(content.slice(0, match.index))}<mark id="hl">${escapeHtml(match[0])}</mark>${toHtml(content.slice(end))}</p>`;
+}
+
 function formatMeta(done) {
   const parts = [done.provider === "fake" ? "Demo model" : done.provider];
   const u = done.usage;
@@ -173,11 +196,14 @@ function formatMeta(done) {
 }
 
 function stream(url) {
-  source = new EventSource(url);
+  if (source) source.close();
+  const current = new EventSource(url);
+  source = current;
   // Connection failures also fire "error", but without data; those go to onerror below.
+  // Events from a superseded stream (the user asked something else) are ignored.
   const on = (name, fn) =>
-    source.addEventListener(name, (e) => {
-      if (typeof e.data === "string") fn(JSON.parse(e.data));
+    current.addEventListener(name, (e) => {
+      if (current === source && typeof e.data === "string") fn(JSON.parse(e.data));
     });
 
   on("thinking", (d) => traceThinking(d.text));
@@ -217,12 +243,12 @@ function stream(url) {
     finish();
   });
   // Network-level failure (not our "error" event, which carries data).
-  source.onerror = (e) => {
-    if (typeof e.data === "string") return;
-    if (source && source.readyState !== EventSource.CLOSED) {
-      setStatus("error", "Connection lost");
-      finish();
-    }
+  // A stream only ends through "done" or "error" (both clear `source` via finish), so any
+  // network-level error before that is fatal: reconnecting would not resume a live answer.
+  current.onerror = (e) => {
+    if (typeof e.data === "string" || current !== source) return;
+    setStatus("error", "Connection lost");
+    finish();
   };
 }
 
@@ -245,9 +271,12 @@ function markHistory(id, status) {
   btn.dataset.question = JSON.stringify({ ...JSON.parse(btn.dataset.question), status });
 }
 
+let generation = 0; // bumped by every new request so stale responses can be dropped
+
 async function ask(text) {
   const question = text.trim();
   if (!question) return;
+  const mine = ++generation;
   els.send.disabled = true;
   reset(question);
   try {
@@ -259,8 +288,9 @@ async function ask(text) {
     if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
     const q = await res.json();
     addHistory(q);
-    stream(q.stream_url);
+    if (mine === generation) stream(q.stream_url);
   } catch (err) {
+    if (mine !== generation) return;
     setStatus("error", "Failed");
     els.body.innerHTML = `<p class="error-text">${escapeHtml(String(err.message || err))}</p>`;
     els.send.disabled = false;
@@ -269,22 +299,14 @@ async function ask(text) {
 
 // ---- document viewer ---------------------------------------------------------------
 
-async function openDocument(id, highlight) {
+async function openDocument(id, highlight, citedHeading) {
   if (!id) return;
   const dialog = $("#doc-viewer");
   const res = await fetch(`/api/documents/${id}`);
   if (!res.ok) return;
   const doc = await res.json();
   $("#doc-title").textContent = doc.title;
-  let html = escapeHtml(doc.content)
-    .replace(/^#{1,6}\s+(.+)$/gm, "<h4>$1</h4>")
-    .replace(/\n{2,}/g, "</p><p>");
-  html = `<p>${html}</p>`;
-  if (highlight) {
-    const needle = escapeHtml(highlight);
-    html = html.replace(needle, `<mark id="hl">${needle}</mark>`);
-  }
-  $("#doc-content").innerHTML = html;
+  $("#doc-content").innerHTML = renderDocument(doc.content, highlight, citedHeading);
   dialog.showModal();
   $("#hl", dialog)?.scrollIntoView({ block: "center" });
 }
@@ -327,12 +349,13 @@ document.addEventListener("click", (e) => {
     el?.classList.add("flash");
   } else if (target.classList.contains("source-btn")) {
     const c = state?.citations.get(Number(target.dataset.cite));
-    openDocument(target.dataset.doc, c?.cited_text);
+    openDocument(target.dataset.doc, c?.cited_text, c?.title.split(" - ").slice(1).join(" - "));
   } else if (target.dataset.doc) {
     openDocument(target.dataset.doc);
   } else if (target.classList.contains("history-item")) {
     const q = JSON.parse(target.dataset.question);
     els.input.value = "";
+    generation += 1;
     reset(q.question);
     stream(q.stream_url);
   }

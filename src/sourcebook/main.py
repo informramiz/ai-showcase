@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from importlib import resources
 from pathlib import Path
 
@@ -63,24 +63,24 @@ def create_app(settings: Settings | None = None, provider: LLMProvider | None = 
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[dict[str, Container]]:
-        db = await connect(settings.database_path)
-        document_repo = SqliteDocumentRepository(db)
-        document_service = DocumentService(document_repo, settings.max_upload_bytes)
-        llm = provider or build_provider(settings)
-        tools = ToolRegistry(
-            [SearchDocumentsTool(document_repo, settings.search_top_k), CalculateTool()]
-        )
-        answers = AnswerService(
-            llm, tools, SqliteQuestionRepository(db), max_turns=settings.max_agent_turns
-        )
-        if settings.seed_samples and await document_repo.count() == 0:
-            logger.info("Seeded %d sample documents", await seed_samples(document_service))
-        logger.info("Sourcebook ready, provider=%s", llm.name)
-        container = Container(settings, db, document_repo, document_service, answers)
-        try:
-            yield {"container": container}
-        finally:
-            await db.close()
+        async with AsyncExitStack() as stack:
+            db = await connect(settings.database_path)
+            stack.push_async_callback(db.close)
+            document_repo = SqliteDocumentRepository(db)
+            document_service = DocumentService(document_repo, settings.max_upload_bytes)
+            llm = provider or build_provider(settings)
+            if isinstance(llm, AnthropicProvider) and provider is None:
+                stack.push_async_callback(llm.aclose)  # the app built this client, so it closes it
+            tools = ToolRegistry(
+                [SearchDocumentsTool(document_repo, settings.search_top_k), CalculateTool()]
+            )
+            answers = AnswerService(
+                llm, tools, SqliteQuestionRepository(db), max_turns=settings.max_agent_turns
+            )
+            if settings.seed_samples and await document_repo.count() == 0:
+                logger.info("Seeded %d sample documents", await seed_samples(document_service))
+            logger.info("Sourcebook ready, provider=%s", llm.name)
+            yield {"container": Container(settings, db, document_repo, document_service, answers)}
 
     app = FastAPI(
         title="Sourcebook",

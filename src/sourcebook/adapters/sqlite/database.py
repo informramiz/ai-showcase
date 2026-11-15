@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -10,7 +13,7 @@ MIGRATIONS: tuple[str, ...] = (
     # 1: documents, heading-scoped chunks with an FTS5 (BM25) index, questions
     """
     CREATE TABLE documents (
-        id          INTEGER PRIMARY KEY,
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
         title       TEXT NOT NULL,
         content     TEXT NOT NULL,
         created_at  TEXT NOT NULL
@@ -46,17 +49,52 @@ MIGRATIONS: tuple[str, ...] = (
 )
 
 
-async def connect(path: Path | str) -> aiosqlite.Connection:
+class Database:
+    """One SQLite connection plus a lock, so each unit of work is atomic across requests.
+
+    Every repository call runs inside `read()` or `transaction()`. The lock keeps another
+    request from committing (or rolling back) a half-finished operation on the shared connection.
+    """
+
+    def __init__(self, connection: aiosqlite.Connection) -> None:
+        self._connection = connection
+        self._lock = asyncio.Lock()
+
+    @asynccontextmanager
+    async def read(self) -> AsyncIterator[aiosqlite.Connection]:
+        async with self._lock:
+            yield self._connection
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Commit when the block succeeds, roll back when it raises (or is cancelled)."""
+        async with self._lock:
+            try:
+                yield self._connection
+            except BaseException:
+                await self._connection.rollback()
+                raise
+            await self._connection.commit()
+
+    async def close(self) -> None:
+        await self._connection.close()
+
+
+async def connect(path: Path | str) -> Database:
     """Open the database, apply pending migrations and return the connection."""
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    db = await aiosqlite.connect(path)
-    db.row_factory = aiosqlite.Row
-    await db.execute("PRAGMA foreign_keys = ON")
-    if str(path) != ":memory:":
-        await db.execute("PRAGMA journal_mode = WAL")
-    await migrate(db)
-    return db
+    connection = await aiosqlite.connect(path)
+    try:
+        connection.row_factory = aiosqlite.Row
+        await connection.execute("PRAGMA foreign_keys = ON")
+        if str(path) != ":memory:":
+            await connection.execute("PRAGMA journal_mode = WAL")
+        await migrate(connection)
+    except BaseException:
+        await connection.close()
+        raise
+    return Database(connection)
 
 
 async def migrate(db: aiosqlite.Connection) -> int:

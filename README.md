@@ -1,6 +1,6 @@
 # Sourcebook
 
-Ask questions about your documents and get answers you can check. Every claim links to the exact sentence it came from, and you can watch the model search, calculate and write in real time.
+Ask questions about your documents and get answers you can check. Cited claims link to the exact sentence they came from (the app does not force the model to cite every statement), and you can watch the model search, calculate and write in real time.
 
 Built by Ramiz Raja as a small but complete example of an AI product on a Python backend: FastAPI with async SQLite, a retrieval-augmented agent loop on the Claude API with tool use and native citations, server-sent events, clean layers behind ports, and tests at two levels with CI.
 
@@ -12,11 +12,11 @@ Live run on `anthropic/claude-sonnet-5.5` through OpenRouter. Full 50-second dem
 
 ## Features
 
-- **Cited answers.** Answers stream in with numbered markers. Each one opens the source document with the cited sentence highlighted. With Claude these are the API's native citations (`search_result_location`), not references the model typed.
-- **Tool use you can see.** The model calls `search_documents` (SQLite FTS5, BM25 ranking, Porter stemming) and `calculate` (a safe arithmetic evaluator, no `eval`). A trace panel shows its thinking summary, each tool call, its input and its results as they happen.
+- **Cited answers.** Answers stream in with numbered markers. Click one to jump to its source card, click the card to open the document with the cited sentence highlighted. With Claude these are the API's native citations (`search_result_location`), not references the model typed.
+- **Tool use you can see.** The model calls `search_documents` (SQLite FTS5, BM25 ranking, Porter stemming) and `calculate` (a safe arithmetic evaluator, no `eval`). A trace panel shows its thinking summary, each tool call, its input and its results as each tool step completes.
 - **Multi-step reasoning.** "What is the daily meal limit, and what would 3 days cost?" searches first, reads the rate, then calls the calculator with `75 * 3`.
 - **Streaming over SSE.** Thinking, tool calls, tool results, tokens and citations arrive as typed events on FastAPI's native SSE support.
-- **Replayable history.** Finished answers are stored with their citations and tool steps. Opening one from "Recent questions" replays it through the same event stream, so it renders exactly as it did live.
+- **Replayable history.** Finished answers are stored with their citations and tool steps. Opening one from "Recent questions" replays it through the same event stream, so the answer text, citations and tool steps render as they did live (thinking summaries and per-passage scores are not stored).
 - **Document library.** Paste text or upload `.md` / `.txt`. Documents are split by heading into sections and indexed at once. Ships with a four-document sample handbook for a fictional company.
 - **JSON API with OpenAPI docs** at `/docs`, alongside the htmx UI.
 - **Demo model.** No key needed. It plans the same kind of tool calls Claude makes, answers extractively from the retrieved sentences and cites them, so the whole pipeline (tools, events, storage, UI) runs for real.
@@ -170,7 +170,7 @@ Optional live smoke test (calls the real model, skipped by default):
 ANTHROPIC_API_KEY=... uv run pytest -m live
 ```
 
-The sidebar shows which model is answering. `SOURCEBOOK_PROVIDER=auto` (default) uses Claude when a key is set and the demo model otherwise; `fake` and `anthropic` force one. Model and effort are configurable (`SOURCEBOOK_MODEL`, default `claude-opus-5-5`; `SOURCEBOOK_EFFORT`, default `medium`). See `.env.example` for all settings. Keys are only read from the environment and held as `SecretStr`, so they never show up in logs or reprs.
+The sidebar shows which model is answering. `SOURCEBOOK_PROVIDER=auto` (default) uses Claude when a key is set and the demo model otherwise; `fake` and `anthropic` force one. Model and effort are configurable (`SOURCEBOOK_MODEL`, default `claude-opus-5-5`; `SOURCEBOOK_EFFORT`, default `medium`). See `.env.example` for the common settings; limits such as `SOURCEBOOK_MAX_UPLOAD_BYTES` and `SOURCEBOOK_MAX_AGENT_TURNS` are in `config.py`. Keys are only read from the environment and held as `SecretStr`, so they never show up in logs or reprs.
 
 **Docker:**
 
@@ -207,14 +207,14 @@ uv run mypy                       # strict, src and tests
 uv run pytest --cov               # branch coverage, fails under 85%
 ```
 
-**119 tests** plus 5 opt-in live tests, **98.9% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
+**132 tests** plus 5 opt-in live tests, **98.4% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
 
 CI (GitHub Actions, on a self-hosted runner) runs lint, format check, mypy and tests with coverage. The runner has no Docker, so the image build and `/api/health` check are done by hand: `docker build -t sourcebook . && docker run -p 8000:8000 sourcebook`.
 
 ## Security
 
 - **No secrets in the repo.** `.env` is git-ignored; `.env.example` holds placeholders only.
-- **Bounded uploads.** Uploads are read with `read(max_bytes + 1)`, and anything over the limit (512 KB by default) is refused with 413, in both the JSON API and the UI.
+- **Bounded uploads.** Uploads (multipart) are read with `read(max_bytes + 1)`, and anything over the limit (512 KB by default) is refused with 413, in both the JSON API and the UI. JSON bodies are checked against the same limit by their raw size once parsed; bound request bodies at the proxy.
 - **CSRF on UI writes.** `POST` and `DELETE` under `/ui/documents` require the `HX-Request: true` header that htmx sends and, when the browser sends `Origin`, it must match `Host`. A cross-site form cannot set that header, and a cross-site `fetch` that tries triggers a CORS preflight the app never approves.
 - **Browser hardening.** Responses carry a strict `Content-Security-Policy` (self-hosted assets only; `/docs` is exempt because Swagger UI loads from a CDN), `X-Content-Type-Options: nosniff` and `Referrer-Policy`.
 - **Escaped output.** Jinja2 autoescapes templates. In `app.js` all model and user text goes through one `escapeHtml` before it reaches the DOM.
@@ -230,14 +230,17 @@ There is no authentication: this is a single-user demo. A multi-user deployment 
 - **Claude API settings from the docs.** [Adaptive thinking](https://docs.claude.com/en/docs/build-with-claude/extended-thinking) with summarized display feeds the trace panel. [Prompt caching](https://docs.claude.com/en/docs/build-with-claude/prompt-caching) covers the stable prefix (tools and system prompt) across agent turns. [Streaming](https://docs.claude.com/en/docs/build-with-claude/streaming) with `eager_input_streaming` on [client tools](https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview), with each tool input validated before it runs. Refusals become a clear error instead of an empty answer.
 - **The agent loop is ours, not a framework's.** `AnswerService` calls the model, runs the tools it asks for, feeds the results back and stops at `max_agent_turns`. That keeps every event visible to the UI and every step testable with the demo model.
 - **A deterministic demo model behind the same port.** Reviewers can run the app without a key, tests are fast and free, and CI never calls a paid API. It is not a mock returning canned strings: it emits the same event types and tool calls, so it exercises the real loop, tools, storage and UI.
-- **SSE over WebSockets.** The stream is one-way, passes through proxies, reconnects natively in `EventSource`, and FastAPI supports it directly.
+- **SSE over WebSockets.** The stream is one-way, passes through proxies, needs no client library (`EventSource`), and FastAPI supports it directly.
 - **Server-rendered UI with htmx plus one small JS module.** The library is plain HTML partials. Only the answer view, which renders a live stream, needs JavaScript. No build step.
 - **Async end to end** (aiosqlite, the async Anthropic client, async generators for streams), so one process can serve many slow model calls at once.
 
 ### Known limits
 
+- A stream is not resumable: if the connection drops mid-answer the UI shows "Connection lost"; reopen the question from history. Answers that hit the output-token limit, exhaust the search turns or come back empty are saved as failed, not as answers.
+- Citations to a deleted document stay in old answers but no longer open anything. Document ids are never reused.
+
 - **Thinking summaries are optional.** Sonnet 5.5 sent one for a plain greeting at medium effort but none at low effort, so the trace may show only tool steps, or a short note when the model answered directly (screenshot: `docs/screenshots/sb-live-notrace.png`). The UI never renders an empty thinking step. Effort is not raised just to force one.
 
-- Beyond the stubbed unit tests, the Claude provider was run live once, through OpenRouter (see above). The demo-model screenshots and API tests do not call a model.
+- Beyond the stubbed unit tests, the Claude provider was run live through OpenRouter only (see above; two sessions, 2026-11-10 and 2026-11-15). The demo-model screenshots and API tests do not call a model.
 - No rate limiting: each question costs model tokens, so put a limit in front of a public deployment.
 - Upload size is enforced when the handler reads the file. Starlette still spools the multipart body to a temporary file first, so a production deployment should also cap request size at the proxy (for example `client_max_body_size` in nginx).

@@ -122,7 +122,7 @@ class CalculateTool:
         return ToolSpec(
             name="calculate",
             description=(
-                "Evaluate an arithmetic expression exactly. Use it for any sum, product, "
+                "Evaluate an arithmetic expression (floating point). Use it for any sum, product, "
                 "percentage or unit conversion based on figures found in the documents."
             ),
             input_schema=_schema(CalculateInput),

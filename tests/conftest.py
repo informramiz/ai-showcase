@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-import aiosqlite
 import pytest
 
-from sourcebook.adapters.sqlite.database import connect
+from sourcebook.adapters.sqlite.database import Database, connect
 from sourcebook.adapters.sqlite.documents import SqliteDocumentRepository
 from sourcebook.adapters.sqlite.questions import SqliteQuestionRepository
 from sourcebook.services.documents import DocumentService
@@ -32,7 +31,7 @@ Report it at security@northwindlabs.example as well.
 
 
 @pytest.fixture
-async def db() -> AsyncIterator[aiosqlite.Connection]:
+async def db() -> AsyncIterator[Database]:
     connection = await connect(":memory:")
     try:
         yield connection
@@ -41,12 +40,12 @@ async def db() -> AsyncIterator[aiosqlite.Connection]:
 
 
 @pytest.fixture
-def document_repo(db: aiosqlite.Connection) -> SqliteDocumentRepository:
+def document_repo(db: Database) -> SqliteDocumentRepository:
     return SqliteDocumentRepository(db)
 
 
 @pytest.fixture
-def question_repo(db: aiosqlite.Connection) -> SqliteQuestionRepository:
+def question_repo(db: Database) -> SqliteQuestionRepository:
     return SqliteQuestionRepository(db)
 
 

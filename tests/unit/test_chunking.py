@@ -40,8 +40,20 @@ def test_long_sections_split_on_sentence_boundaries() -> None:
     assert [c.ordinal for c in chunks] == list(range(len(chunks)))
 
 
-def test_empty_sections_produce_no_chunks() -> None:
-    assert chunk_document("# Only a heading\n\n") == []
+def test_empty_input_produces_no_chunks() -> None:
+    assert chunk_document("\n\n") == []
+
+
+def test_heading_only_section_stays_searchable() -> None:
+    chunks = chunk_document("# Only a heading\n\n")
+    assert [(c.heading, c.text) for c in chunks] == [("Only a heading", "Only a heading")]
+
+
+def test_long_sentence_is_split_below_the_limit() -> None:
+    chunks = chunk_document("word " * 400 + "end.", max_chars=100)
+    assert len(chunks) > 1
+    assert all(len(c.text) <= 100 + len(c.text.splitlines()) for c in chunks)
+    assert chunk_document("x" * 250, max_chars=100)[0].text.splitlines()[0] == "x" * 100
 
 
 def test_derive_title_uses_first_heading() -> None:

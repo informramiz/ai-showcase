@@ -136,9 +136,11 @@ class AnswerService:
 
                 if completed.stop_reason == "refusal":
                     raise RefusalError(completed.refusal_category)
+                if completed.stop_reason == "max_tokens":
+                    raise ProviderError("The model ran out of output tokens before finishing.")
                 calls = completed.message.tool_calls
                 if completed.stop_reason != "tool_use" or not calls:
-                    break  # end_turn, or max_tokens on a text-only turn: keep what we have
+                    break  # the model finished its turn without asking for a tool
 
                 messages.append(completed.message)
                 results: list[ToolResult] = []
@@ -158,8 +160,9 @@ class AnswerService:
                     results.append(outcome.result)
                 messages.append(ToolResultsMessage(tuple(results)))
             else:
-                if not run.text.strip():
-                    run.add_text("I ran out of search attempts before finding a confident answer.")
+                raise ProviderError("The model used all its search attempts without answering.")
+            if not run.text.strip():
+                raise ProviderError("The model returned an empty answer.")
 
             answer = Answer(
                 text=run.text.strip(),

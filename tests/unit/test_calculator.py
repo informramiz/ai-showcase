@@ -50,3 +50,13 @@ def test_rejects_unsafe_or_invalid_input(expression: str, message: str) -> None:
 )
 def test_format_number(value: float, text: str) -> None:
     assert format_number(value) == text
+
+
+@pytest.mark.parametrize("expression", ["1e308 ** 2", "(-1) ** 0.5", "10 ** 400"])
+def test_unrepresentable_results_are_validation_errors(expression: str) -> None:
+    with pytest.raises(ValidationError):
+        evaluate(expression)
+
+
+def test_small_numbers_keep_their_precision() -> None:
+    assert format_number(0.00001) == "1e-05"
