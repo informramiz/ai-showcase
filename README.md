@@ -130,7 +130,7 @@ tests/
 
 ### Live-tested with a real model
 
-Run on 2026-11-10 against `anthropic/claude-sonnet-5.5` through [OpenRouter's Anthropic-compatible endpoint](https://openrouter.ai/docs/guides/guides/claude-code-integration), using the official `anthropic` SDK with `base_url`. Search, calculation, native citations opening the right sentence, upload, replay and a bad-key error all behaved correctly (`tests/live`, plus the screenshots below).
+Run on 2026-11-10 and again end to end on 2026-11-15 (Docker image, upload, two questions with tool calls and citations, history) against `anthropic/claude-sonnet-5.5` through [OpenRouter's Anthropic-compatible endpoint](https://openrouter.ai/docs/guides/guides/claude-code-integration), using the official `anthropic` SDK with `base_url`. Search, calculation, native citations opening the right sentence, upload, replay and a bad-key error all behaved correctly (`tests/live`, plus the screenshots below).
 
 | Real-model answer | Cited sentence highlighted |
 | --- | --- |
@@ -140,7 +140,7 @@ Also verified: replaying a past answer by clicking it in "Recent questions" in a
 
 <img src="docs/screenshots/sb-live-replay.png" width="600">
 
-Limits found while testing: OpenRouter rejects the Anthropic-only server-side `fallbacks` option, so Sourcebook leaves it off whenever a base URL is set. A replayed answer shows each tool step but not the per-passage scores the live trace shows. Direct api.anthropic.com was not tested (no Anthropic key), so the default `SOURCEBOOK_MODEL` id is untested against it.
+Limits found while testing: OpenRouter rejects the Anthropic-only server-side `fallbacks` option, so Sourcebook leaves it off whenever a base URL is set. A replayed answer shows each tool step but not the per-passage scores the live trace shows. **Tested provider: OpenRouter only.** Direct api.anthropic.com was not tested (no Anthropic key), so the direct path and the default `SOURCEBOOK_MODEL` id are untested against it; the Claude adapter is covered by stubbed-SDK unit tests there.
 
 ## Run
 
@@ -207,9 +207,9 @@ uv run mypy                       # strict, src and tests
 uv run pytest --cov               # branch coverage, fails under 85%
 ```
 
-**118 tests** plus 5 opt-in live tests, **98.6% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
+**119 tests** plus 5 opt-in live tests, **98.9% branch coverage** on the last run. The API tests drive the real app through `TestClient` with a temporary SQLite file and the demo model: they create documents, ask questions, parse the SSE stream and check event order, citations, tool inputs and replay. The Claude adapter is unit-tested against a stubbed SDK stream, covering thinking, citations, tool use, refusals and malformed tool JSON.
 
-CI (GitHub Actions) runs lint, format check, mypy and tests with coverage, then builds the Docker image, starts it and polls `/api/health`.
+CI (GitHub Actions, on a self-hosted runner) runs lint, format check, mypy and tests with coverage. The runner has no Docker, so the image build and `/api/health` check are done by hand: `docker build -t sourcebook . && docker run -p 8000:8000 sourcebook`.
 
 ## Security
 
