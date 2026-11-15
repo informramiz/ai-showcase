@@ -38,12 +38,14 @@ class DocumentService:
     async def ingest(
         self, content: str, title: str | None = None, *, fallback: str = ""
     ) -> Document:
-        text = content.replace("\r\n", "\n").strip()
-        if len(text.encode()) > self._max_bytes:
+        if len(content.encode()) > self._max_bytes:  # raw size, before normalising whitespace
             raise TooLargeError(f"Document is larger than {self._max_bytes // 1000} KB.")
+        text = content.replace("\r\n", "\n").strip()
         if len(text) < MIN_CONTENT_CHARS:
             raise ValidationError("Document is empty or too short to index.")
         chunks = chunk_document(text)
+        if not chunks:
+            raise ValidationError("Document has no text to index.")
         name = (title or "").strip() or derive_title(text, fallback or "Untitled document")
         if len(name) > MAX_TITLE_CHARS:
             raise ValidationError(f"Title is longer than {MAX_TITLE_CHARS} characters.")

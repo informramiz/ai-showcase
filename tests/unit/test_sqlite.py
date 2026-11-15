@@ -1,8 +1,7 @@
+import asyncio
 from pathlib import Path
 
-import aiosqlite
-
-from sourcebook.adapters.sqlite.database import MIGRATIONS, connect, migrate
+from sourcebook.adapters.sqlite.database import MIGRATIONS, Database, connect, migrate
 from sourcebook.adapters.sqlite.documents import SqliteDocumentRepository, fts_query
 from sourcebook.adapters.sqlite.questions import SqliteQuestionRepository
 from sourcebook.domain.models import Answer, Citation, NewChunk, QuestionStatus, ToolStep, Usage
@@ -82,17 +81,71 @@ async def test_file_database_is_created_and_migrations_are_idempotent(tmp_path: 
     db = await connect(path)
     try:
         assert path.exists()
-        assert await migrate(db) == len(MIGRATIONS)
-        async with db.execute("PRAGMA user_version") as cur:
-            row = await cur.fetchone()
+        async with db.read() as conn:
+            assert await migrate(conn) == len(MIGRATIONS)
+            async with conn.execute("PRAGMA user_version") as cur:
+                row = await cur.fetchone()
         assert row is not None
         assert row[0] == len(MIGRATIONS)
     finally:
         await db.close()
 
 
-async def test_foreign_keys_are_enforced(db: aiosqlite.Connection) -> None:
-    async with db.execute("PRAGMA foreign_keys") as cur:
+async def test_foreign_keys_are_enforced(db: Database) -> None:
+    async with db.read() as conn, conn.execute("PRAGMA foreign_keys") as cur:
         row = await cur.fetchone()
     assert row is not None
     assert row[0] == 1
+
+
+async def test_document_ids_are_not_reused_after_delete(
+    document_repo: SqliteDocumentRepository,
+) -> None:
+    first = await document_repo.add("A", "text", [])
+    await document_repo.delete(first.id)
+    second = await document_repo.add("B", "text", [])
+    assert second.id > first.id
+
+
+async def test_failed_write_does_not_roll_back_a_concurrent_one(
+    db: Database, document_repo: SqliteDocumentRepository
+) -> None:
+    async def failing() -> None:
+        async with db.transaction() as conn:
+            await conn.execute(
+                "INSERT INTO documents (title, content, created_at) VALUES ('x', 'x', 'x')"
+            )
+            await asyncio.sleep(0.01)
+            raise RuntimeError("boom")
+
+    async def adding() -> None:
+        await document_repo.add("Kept", "text", [])
+
+    results = await asyncio.gather(failing(), adding(), return_exceptions=True)
+    assert isinstance(results[0], RuntimeError)
+    assert [d.title for d in await document_repo.list_all()] == ["Kept"]
+
+
+async def test_upgrading_a_version_1_database_keeps_data_and_stops_id_reuse(tmp_path: Path) -> None:
+    import aiosqlite
+
+    path = tmp_path / "old.db"
+    async with aiosqlite.connect(path) as old:
+        await old.executescript(MIGRATIONS[0] + "PRAGMA user_version = 1;")
+        await old.execute(
+            "INSERT INTO documents VALUES (1, 'Old', 'Old text here.', '2026-01-01T00:00:00+00:00')"
+        )
+        await old.execute("INSERT INTO chunks VALUES (1, 1, 0, 'H', 'Old text here.')")
+        await old.commit()
+
+    db = await connect(path)
+    try:
+        repo = SqliteDocumentRepository(db)
+        kept = await repo.get(1)
+        assert kept is not None
+        assert kept.chunk_count == 1
+        assert [hit.document_id for hit in await repo.search("text", 5)] == [1]
+        assert await repo.delete(1)
+        assert (await repo.add("New", "text", [])).id == 2
+    finally:
+        await db.close()

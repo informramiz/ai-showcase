@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     max_output_tokens: int = Field(default=16_000, ge=1_024, le=128_000)
     max_agent_turns: int = Field(default=4, ge=1, le=10)
-    search_top_k: int = Field(default=4, ge=1, le=10)
+    search_top_k: int = Field(default=4, ge=1, le=8)  # tool schema allows at most 8
 
     database_path: Path = Path("data/sourcebook.db")
     seed_samples: bool = True

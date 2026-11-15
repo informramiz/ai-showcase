@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import aiosqlite
 
+from sourcebook.adapters.sqlite.database import Database
 from sourcebook.domain.models import Document, NewChunk, SearchHit
 
 _WORD = re.compile(r"[\w']+", re.UNICODE)
@@ -75,48 +76,47 @@ def fts_query(text: str) -> str | None:
 
 
 class SqliteDocumentRepository:
-    def __init__(self, db: aiosqlite.Connection) -> None:
+    def __init__(self, db: Database) -> None:
         self._db = db
 
     async def add(self, title: str, content: str, chunks: Sequence[NewChunk]) -> Document:
         created = datetime.now(UTC)
-        try:
-            cursor = await self._db.execute(
+        async with self._db.transaction() as conn:
+            cursor = await conn.execute(
                 "INSERT INTO documents (title, content, created_at) VALUES (?, ?, ?)",
                 (title, content, created.isoformat()),
             )
             document_id = cursor.lastrowid
             assert document_id is not None
-            await self._db.executemany(
+            await conn.executemany(
                 "INSERT INTO chunks (document_id, ordinal, heading, text) VALUES (?, ?, ?, ?)",
                 [(document_id, c.ordinal, c.heading, c.text) for c in chunks],
             )
-            await self._db.commit()
-        except BaseException:
-            # The connection is shared: never leave half a document for the next commit.
-            await self._db.rollback()
-            raise
         return Document(document_id, title, content, created, len(chunks))
 
     async def get(self, document_id: int) -> Document | None:
-        async with self._db.execute(
-            _SELECT + " WHERE d.id = ? GROUP BY d.id", (document_id,)
-        ) as cur:
+        async with (
+            self._db.read() as conn,
+            conn.execute(_SELECT + " WHERE d.id = ? GROUP BY d.id", (document_id,)) as cur,
+        ):
             row = await cur.fetchone()
         return _document(row) if row else None
 
     async def list_all(self) -> list[Document]:
-        async with self._db.execute(_SELECT + " GROUP BY d.id ORDER BY d.created_at, d.id") as cur:
+        async with (
+            self._db.read() as conn,
+            conn.execute(_SELECT + " GROUP BY d.id ORDER BY d.created_at, d.id") as cur,
+        ):
             rows = await cur.fetchall()
         return [_document(row) for row in rows]
 
     async def delete(self, document_id: int) -> bool:
-        cursor = await self._db.execute("DELETE FROM documents WHERE id = ?", (document_id,))
-        await self._db.commit()
+        async with self._db.transaction() as conn:
+            cursor = await conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
         return cursor.rowcount > 0
 
     async def count(self) -> int:
-        async with self._db.execute("SELECT COUNT(*) FROM documents") as cur:
+        async with self._db.read() as conn, conn.execute("SELECT COUNT(*) FROM documents") as cur:
             row = await cur.fetchone()
         return int(row[0]) if row else 0
 
@@ -134,7 +134,7 @@ class SqliteDocumentRepository:
             ORDER BY rank
             LIMIT ?
         """
-        async with self._db.execute(sql, (match, limit)) as cur:
+        async with self._db.read() as conn, conn.execute(sql, (match, limit)) as cur:
             rows = await cur.fetchall()
         return [
             SearchHit(

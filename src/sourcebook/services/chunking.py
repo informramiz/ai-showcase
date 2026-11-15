@@ -10,6 +10,7 @@ _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])")
 _BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 MAX_CHUNK_CHARS = 1_200
+MAX_HEADING_CHARS = 200
 
 
 def split_sentences(text: str) -> tuple[str, ...]:
@@ -26,19 +27,47 @@ def split_sentences(text: str) -> tuple[str, ...]:
     return tuple(sentences)
 
 
+def _split_long(sentence: str, max_chars: int) -> list[str]:
+    """Break one over-long sentence on word boundaries so no chunk can exceed the limit."""
+    pieces: list[str] = []
+    current = ""
+    for token in sentence.split():
+        rest = token
+        while len(rest) > max_chars:  # a single unbroken token longer than the limit
+            if current:
+                pieces.append(current)
+                current = ""
+            pieces.append(rest[:max_chars])
+            rest = rest[max_chars:]
+        if current and len(current) + 1 + len(rest) > max_chars:
+            pieces.append(current)
+            current = rest
+        else:
+            current = f"{current} {rest}".strip()
+    if current:
+        pieces.append(current)
+    return pieces
+
+
 def chunk_document(content: str, *, max_chars: int = MAX_CHUNK_CHARS) -> list[NewChunk]:
     """Group text under its nearest heading, splitting long sections on sentence boundaries."""
     sections: list[tuple[str, list[str]]] = [("", [])]
     for line in content.splitlines():
         match = _HEADING.match(line)
         if match:
-            sections.append((match.group(2).strip(), []))
+            sections.append((match.group(2).strip()[:MAX_HEADING_CHARS], []))
         else:
             sections[-1][1].append(line)
 
     chunks: list[NewChunk] = []
     for heading, lines in sections:
-        sentences = split_sentences("\n".join(lines))
+        sentences = [
+            piece
+            for sentence in split_sentences("\n".join(lines))
+            for piece in _split_long(sentence, max_chars)
+        ]
+        if not sentences and heading:
+            sentences = _split_long(heading, max_chars)  # heading-only: keep it searchable
         buffer: list[str] = []
         size = 0
         for sentence in sentences:

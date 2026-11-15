@@ -203,15 +203,40 @@ async def test_stream_that_ends_without_completion_fails(
     assert "ended unexpectedly" in failed.message
 
 
-async def test_running_out_of_turns_still_answers(
+async def test_running_out_of_turns_fails_instead_of_saving_a_preamble(
     document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
 ) -> None:
     call = ToolCall("s", "search_documents", {"query": "nothing here"})
-    provider = ScriptedProvider([tool_turn(call), tool_turn(call)])
-    _, events = await run(service(provider, document_repo, question_repo, max_turns=2), "q?")
-    done = events[-1]
-    assert isinstance(done, AnswerCompleted)
-    assert "ran out of search attempts" in done.answer.text
+    narrated: list[TurnEvent] = [
+        TextChunk("Let me search."),
+        TurnCompleted(AssistantMessage("", (call,)), "tool_use", Usage(10, 5)),
+    ]
+    provider = ScriptedProvider([narrated, narrated])
+    qid, events = await run(service(provider, document_repo, question_repo, max_turns=2), "q?")
+    failed = events[-1]
+    assert isinstance(failed, AnswerFailed)
+    assert "search attempts" in failed.message
+    stored = await question_repo.get(qid)
+    assert stored is not None
+    assert stored.status is QuestionStatus.FAILED
+
+
+async def test_truncated_answer_is_a_failure(
+    document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
+) -> None:
+    provider = ScriptedProvider([answer_turn(TextChunk("Half an ans"), stop="max_tokens")])
+    _, events = await run(service(provider, document_repo, question_repo), "q?")
+    failed = events[-1]
+    assert isinstance(failed, AnswerFailed)
+    assert "output tokens" in failed.message
+
+
+async def test_empty_answer_is_a_failure(
+    document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
+) -> None:
+    provider = ScriptedProvider([answer_turn()])
+    _, events = await run(service(provider, document_repo, question_repo), "q?")
+    assert isinstance(events[-1], AnswerFailed)
 
 
 async def test_answered_question_is_replayed_without_calling_the_model(
@@ -277,3 +302,26 @@ def test_replay_rebuilds_events_and_keeps_unknown_markers_as_text() -> None:
         TokenDelta(" c"),
         AnswerCompleted(5, answer),
     ]
+
+
+async def test_empty_final_turn_after_narrated_tool_turn_fails(
+    document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
+) -> None:
+    call = ToolCall("s", "search_documents", {"query": "meal"})
+    narrated: list[TurnEvent] = [
+        TextChunk("Let me search."),
+        TurnCompleted(AssistantMessage("", (call,)), "tool_use", Usage(1, 1)),
+    ]
+    provider = ScriptedProvider([narrated, answer_turn()])
+    _, events = await run(service(provider, document_repo, question_repo), "q?")
+    failed = events[-1]
+    assert isinstance(failed, AnswerFailed)
+    assert "empty answer" in failed.message
+
+
+async def test_unknown_stop_reason_is_a_failure(
+    document_repo: SqliteDocumentRepository, question_repo: SqliteQuestionRepository
+) -> None:
+    provider = ScriptedProvider([answer_turn(TextChunk("Partial"), stop="other")])
+    _, events = await run(service(provider, document_repo, question_repo), "q?")
+    assert isinstance(events[-1], AnswerFailed)

@@ -12,7 +12,9 @@ from sourcebook.api.deps import AnswersDep, QuestionDep
 from sourcebook.api.events import to_sse
 from sourcebook.api.schemas import ErrorOut, QuestionIn, QuestionOut
 
-router = APIRouter(prefix="/api/questions", tags=["questions"])
+router = APIRouter(
+    prefix="/api/questions", tags=["questions"], responses={422: {"model": ErrorOut}}
+)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, responses={422: {"model": ErrorOut}})

@@ -24,6 +24,7 @@ from sourcebook.ports.llm import (
     Message,
     TextChunk,
     ThinkingChunk,
+    ToolCall,
     ToolResult,
     ToolResultsMessage,
     TurnCompleted,
@@ -132,34 +133,30 @@ class AnswerService:
                 if completed is None:
                     raise ProviderError("The model stream ended unexpectedly.")
                 run.usage += completed.usage
+                final_turn_had_text = run.turn_has_text
                 run.end_turn()
 
                 if completed.stop_reason == "refusal":
                     raise RefusalError(completed.refusal_category)
+                if completed.stop_reason == "max_tokens":
+                    raise ProviderError("The model ran out of output tokens before finishing.")
                 calls = completed.message.tool_calls
                 if completed.stop_reason != "tool_use" or not calls:
-                    break  # end_turn, or max_tokens on a text-only turn: keep what we have
+                    if completed.stop_reason != "end_turn":
+                        raise ProviderError(
+                            f"The model stopped early ({completed.stop_reason}) without an answer."
+                        )
+                    if not final_turn_had_text:
+                        raise ProviderError("The model returned an empty answer.")
+                    break
 
                 messages.append(completed.message)
                 results: list[ToolResult] = []
-                for call in calls:
-                    outcome = await self._tools.run(call)
-                    yield ToolCalled(call.id, call.name, outcome.input)
-                    yield ToolFinished(
-                        call.id,
-                        call.name,
-                        outcome.summary,
-                        outcome.result.hits,
-                        outcome.result.is_error,
-                    )
-                    run.steps.append(
-                        ToolStep(call.name, outcome.input, outcome.summary, outcome.result.is_error)
-                    )
-                    results.append(outcome.result)
+                async for tool_event in self._run_tools(calls, run, results):
+                    yield tool_event
                 messages.append(ToolResultsMessage(tuple(results)))
             else:
-                if not run.text.strip():
-                    run.add_text("I ran out of search attempts before finding a confident answer.")
+                raise ProviderError("The model used all its search attempts without answering.")
 
             answer = Answer(
                 text=run.text.strip(),
@@ -179,6 +176,20 @@ class AnswerService:
             await self._questions.save_failure(question.id, message)
             yield AnswerFailed(question.id, message)
 
+    async def _run_tools(
+        self, calls: tuple[ToolCall, ...], run: _RunState, results: list[ToolResult]
+    ) -> AsyncIterator[AnswerEvent]:
+        for call in calls:
+            outcome = await self._tools.run(call)
+            yield ToolCalled(call.id, call.name, outcome.input)
+            yield ToolFinished(
+                call.id, call.name, outcome.summary, outcome.result.hits, outcome.result.is_error
+            )
+            run.steps.append(
+                ToolStep(call.name, outcome.input, outcome.summary, outcome.result.is_error)
+            )
+            results.append(outcome.result)
+
 
 class _RunState:
     """Accumulates the answer text (with [^n] citation markers), citations and tool steps."""
@@ -193,6 +204,10 @@ class _RunState:
     @property
     def text(self) -> str:
         return "".join(self.parts)
+
+    @property
+    def turn_has_text(self) -> bool:
+        return self._turn_has_text
 
     def add_text(self, text: str) -> str:
         if not self._turn_has_text and self.parts:

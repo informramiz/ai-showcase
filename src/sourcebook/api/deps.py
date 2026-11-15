@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from typing import Annotated
 from urllib.parse import urlsplit
 
-import aiosqlite
 from fastapi import Depends, HTTPException, Request, status
 
+from sourcebook.adapters.sqlite.database import Database
 from sourcebook.config import Settings
 from sourcebook.domain.models import Question
 from sourcebook.ports.repositories import DocumentRepository
@@ -19,7 +19,7 @@ from sourcebook.services.documents import DocumentService
 @dataclass(slots=True)
 class Container:
     settings: Settings
-    db: aiosqlite.Connection
+    db: Database
     document_repo: DocumentRepository
     documents: DocumentService
     answers: AnswerService

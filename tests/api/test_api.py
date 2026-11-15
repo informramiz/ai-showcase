@@ -230,3 +230,41 @@ def test_overlong_title_is_rejected(empty_client: TestClient) -> None:
     )
     assert response.status_code == 200
     assert "Title is longer" in response.text
+
+
+def test_request_validation_errors_use_the_documented_detail_shape(
+    empty_client: TestClient,
+) -> None:
+    response = empty_client.post("/api/questions", json={})
+    assert response.status_code == 422
+    assert isinstance(response.json()["detail"], str)
+    assert "question" in response.json()["detail"]
+
+
+def test_oversized_json_document_is_refused_even_when_padded_with_whitespace(
+    empty_client: TestClient,
+) -> None:
+    padded = " " * 600_000 + "A short document that is long enough to index."
+    assert empty_client.post("/api/documents", json={"content": padded}).status_code == 413
+
+
+def test_heading_only_document_is_indexed(empty_client: TestClient) -> None:
+    response = empty_client.post(
+        "/api/documents", json={"content": "# A heading with no body text"}
+    )
+    assert response.status_code == 201
+    assert response.json()["chunk_count"] == 1
+
+
+def test_openapi_declares_string_detail_for_every_validated_route(
+    empty_client: TestClient,
+) -> None:
+    spec = empty_client.get("/openapi.json").json()
+    for path, method in [
+        ("/api/questions", "get"),
+        ("/api/questions/{question_id}", "get"),
+        ("/api/documents/{document_id}", "get"),
+    ]:
+        schema = spec["paths"][path][method]["responses"]["422"]["content"]["application/json"]
+        assert schema["schema"]["$ref"].endswith("/ErrorOut")
+    assert empty_client.get("/api/questions?limit=0").json()["detail"].startswith("query.limit")

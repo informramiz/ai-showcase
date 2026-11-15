@@ -73,8 +73,15 @@ class SearchDocumentsTool:
                 "passages as citable search results. Call it before answering any question about "
                 "the documents; call it again with different keywords if the first results miss."
             ),
-            input_schema=_schema(SearchInput),
+            input_schema=self._input_schema(),
         )
+
+    def _input_schema(self) -> dict[str, object]:
+        schema = _schema(SearchInput)
+        properties = schema["properties"]
+        assert isinstance(properties, dict)
+        properties["top_k"] = {**properties["top_k"], "default": self._default_top_k}
+        return schema
 
     async def run(self, call: ToolCall) -> ToolOutcome:
         raw = call.input if isinstance(call.input, dict) else {}
@@ -122,7 +129,7 @@ class CalculateTool:
         return ToolSpec(
             name="calculate",
             description=(
-                "Evaluate an arithmetic expression exactly. Use it for any sum, product, "
+                "Evaluate an arithmetic expression (floating point). Use it for any sum, product, "
                 "percentage or unit conversion based on figures found in the documents."
             ),
             input_schema=_schema(CalculateInput),

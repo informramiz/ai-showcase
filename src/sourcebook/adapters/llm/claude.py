@@ -68,6 +68,9 @@ class AnthropicProvider:
     def name(self) -> str:
         return self._model
 
+    async def aclose(self) -> None:
+        await self._client.close()
+
     def _fallback_options(self) -> dict[str, Any]:
         if not self._server_fallback:
             return {}

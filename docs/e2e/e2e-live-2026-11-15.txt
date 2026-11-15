@@ -1,0 +1,181 @@
+provider/model: anthropic/claude-sonnet-5.5 via OpenRouter, app in Docker (docker run, image built from main cdf6181)
+== upload
+{"id":5,"title":"Onboarding Checklist","created_at":"2026-11-15T15:16:57.969164Z","chunk_count":2,"word_count":44,"content":"# Onboarding Checklist\n\n## Laptop\nNew hires receive a laptop within 2 business days of their start date. Lost laptops must be reported within 24 hours.\n\n## Training\nSecu
+== ask: What is the daily meal limit, and what would 3 days cost?
+{"id":1,"question":"What is the daily meal limit, and what would 3 days cost?","status":"pending","created_at":"2026-11-15T15:16:57.980794Z","stream_url":"/api/questions/1/stream","answer":null,"error
+event: tool_call
+data: {"id": "toolu_01TuRQQNwKkBAirkDQeoZZqX", "name": "search_documents", "input": {"query": "daily meal limit per diem", "top_k": 4}}
+id: 1
+
+event: tool_result
+data: {"id": "toolu_01TuRQQNwKkBAirkDQeoZZqX", "name": "search_documents", "summary": "4 passages from Expenses and Travel, On-call Handbook, Remote Work Policy", "is_error": false, "hits": [{"source": "doc://2#chunk-2", "title": "Expenses and Travel - Meals a
+id: 2
+
+event: tool_call
+data: {"id": "toolu_01BiXxmQRUiqrwpsAkZoD6Wt", "name": "calculate", "input": {"expression": "75*3"}}
+id: 3
+
+event: tool_result
+data: {"id": "toolu_01BiXxmQRUiqrwpsAkZoD6Wt", "name": "calculate", "summary": "= 225", "is_error": false, "hits": []}
+id: 4
+
+event: token
+data: {"text": "The da"}
+id: 5
+
+event: token
+data: {"text": "ily meal lim"}
+id: 6
+
+event: token
+data: {"text": "it is $75,"}
+id: 7
+
+event: token
+data: {"text": " so"}
+id: 8
+
+event: token
+data: {"text": " three days would cost up"}
+id: 9
+
+event: token
+data: {"text": " to $225."}
+id: 10
+
+event: token
+data: {"text": "\n\n"}
+id: 11
+
+event: token
+data: {"text": "The daily meal allow"}
+id: 12
+
+event: token
+data: {"text": "ance while travelling is $75"}
+id: 13
+
+event: token
+data: {"text": " per day."}
+id: 14
+
+event: token
+data: {"text": " "}
+id: 15
+
+event: token
+data: {"text": "It"}
+id: 16
+
+event: token
+data: {"text": " covers breakfast, l"}
+id: 17
+
+event: token
+data: {"text": "unch, dinner and sn"}
+id: 18
+
+event: token
+data: {"text": "acks."}
+id: 19
+
+event: token
+data: {"text": " "}
+id: 20
+
+event: token
+data: {"text": "Al"}
+id: 21
+
+event: token
+data: {"text": "cohol is"}
+id: 22
+
+event: token
+data: {"text": "n't reimbursed,"}
+id: 23
+
+event: token
+data: {"text": " except at team events a"}
+id: 24
+
+event: token
+data: {"text": " director has"}
+id: 25
+
+event: token
+data: {"text": " approved."}
+id: 26
+
+event: citation
+data: {"index": 1, "source": "doc://2#chunk-2", "title": "Expenses and Travel - Meals and per diem", "cited_text": "The daily meal allowance while travelling is $75 per day.", "document_id": 2}
+id: 27
+
+event: citation
+data: {"index": 2, "source": "doc://2#chunk-2", "title": "Expenses and Travel - Meals and per diem", "cited_text": "The allowance covers breakfast, lunch, dinner and snacks.", "document_id": 2}
+id: 28
+
+event: citation
+data: {"index": 3, "source": "doc://2#chunk-2", "title": "Expenses and Travel - Meals and per diem", "cited_text": "Alcohol is not reimbursed, except at team events approved by a director.", "document_id": 2}
+id: 29
+
+event: done
+data: {"question_id": 1, "text": "The daily meal limit is $75, so three days would cost up to $225.\n\nThe daily meal allowance while travelling is $75 per day. It covers breakfast, lunch, dinner and snacks. Alcohol isn't reimbursed, except at team events a di
+id: 30
+
+== ask: How long do new hires have to complete security training?
+{"id":2,"question":"How long do new hires have to complete security training?","status":"pending","created_at":"2026-11-15T15:17:04.738425Z","stream_url":"/api/questions/2/stream","answer":null,"error
+event: tool_call
+data: {"id": "toolu_019E67Z5K31ppwU5BoM6zfW1", "name": "search_documents", "input": {"query": "new hires security training complete within days", "top_k": 4}}
+id: 1
+
+event: tool_result
+data: {"id": "toolu_019E67Z5K31ppwU5BoM6zfW1", "name": "search_documents", "summary": "4 passages from Onboarding Checklist, Security Basics", "is_error": false, "hits": [{"source": "doc://5#chunk-1", "title": "Onboarding Checklist - Training", "document_id": 
+id: 2
+
+event: token
+data: {"text": "New hires have "}
+id: 3
+
+event: token
+data: {"text": "14 days to fin"}
+id: 4
+
+event: token
+data: {"text": "ish security training. "}
+id: 5
+
+event: token
+data: {"text": "Security training must be completed in"}
+id: 6
+
+event: token
+data: {"text": " the first 14 days."}
+id: 7
+
+event: token
+data: {"text": " "}
+id: 8
+
+event: token
+data: {"text": "Each module takes about"}
+id: 9
+
+event: token
+data: {"text": " 45 minutes."}
+id: 10
+
+event: citation
+data: {"index": 1, "source": "doc://5#chunk-1", "title": "Onboarding Checklist - Training", "cited_text": "Security training must be completed in the first 14 days.", "document_id": 5}
+id: 11
+
+event: citation
+data: {"index": 2, "source": "doc://5#chunk-1", "title": "Onboarding Checklist - Training", "cited_text": "Each module takes about 45 minutes.", "document_id": 5}
+id: 12
+
+event: done
+data: {"question_id": 2, "text": "New hires have 14 days to finish security training. Security training must be completed in the first 14 days. Each module takes about 45 minutes.[^1][^2]", "provider": "anthropic/claude-sonnet-5.5", "citations": [{"index": 1, 
+id: 13
+
+== history
+[{"id":2,"question":"How long do new hires have to complete security training?","status":"answered","created_at":"2026-11-15T15:17:04.738425Z","stream_url":"/api/questions/2/stream","answer":{"text":"New hires have 14 days to finish security training. Security training must be completed in the first 14 days. Each module takes about 45 minutes.[^1][^2]","provider":"anthropic/claude-sonnet-5.5","citations":[{"index":1,"source":"doc://5#chunk-1","title":"Onboarding Checklist - Training","cited_text":"Security training must be completed in the first 14 days.","document_id":5},{"index":2,"source":"

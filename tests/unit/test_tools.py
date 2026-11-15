@@ -67,3 +67,12 @@ async def test_registry_lists_specs_in_order_and_rejects_unknown_tools(
 
     ok = await registry.run(ToolCall("c", "calculate", {"expression": "2+2"}))
     assert ok.result.text == "2+2 = 4"
+
+
+def test_search_schema_advertises_the_configured_default(
+    document_repo: SqliteDocumentRepository,
+) -> None:
+    schema = SearchDocumentsTool(document_repo, default_top_k=6).spec.input_schema
+    properties = schema["properties"]
+    assert isinstance(properties, dict)
+    assert properties["top_k"]["default"] == 6
